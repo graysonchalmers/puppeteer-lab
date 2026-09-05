@@ -7,11 +7,13 @@
  * Confidence gating is fixed at 0.5 (no slider on this demo).
  */
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Camera, Waves, PenTool, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, PenTool, RotateCcw, Trash2 } from 'lucide-react';
 import { useMediaPipe } from '../../hooks/useMediaPipe';
 import { resolveHands } from '../shared/resolveHands';
 import { useHandRenderLoop, RenderFrame } from '../shared/useHandRenderLoop';
 import { calculatePinchDistance } from '../shared/gestureAnalysis';
+import SmoothingControl from '../shared/SmoothingControl';
+import { smoothingToLerp } from '../shared/smoothing';
 import {
   StrokePoint,
   Stroke,
@@ -82,8 +84,7 @@ const AirCanvas: React.FC<AirCanvasProps> = ({ onBack }) => {
 
   // Dynamic Smoothing
   useEffect(() => {
-    const lerp = 1.0 - smoothingAmount * 0.9;
-    setSmoothingFactor(lerp);
+    setSmoothingFactor(smoothingToLerp(smoothingAmount));
   }, [smoothingAmount, setSmoothingFactor]);
 
   // Per-frame draw: reads everything through refs so this callback stays
@@ -333,54 +334,7 @@ const AirCanvas: React.FC<AirCanvasProps> = ({ onBack }) => {
           </div>
 
           {/* Global Smoothing Controls */}
-          <div className="bg-[#15171C] p-3.5 rounded border border-white/10">
-            <div className="flex justify-between items-center mb-2.5">
-              <h3 className="text-[10px] uppercase tracking-wider text-white font-bold flex items-center gap-1.5">
-                <Waves size={12} /> Global Smoothing Filter
-              </h3>
-              <span className="text-[11px] font-bold text-[#EE3B2B]">
-                {(smoothingAmount * 100).toFixed(0)}%
-              </span>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="grid grid-cols-4 gap-1 mb-3">
-              {[
-                { label: 'RAW', val: 0.0 },
-                { label: 'BAL', val: 0.4 },
-                { label: 'SMTH', val: 0.75 },
-                { label: 'MAX', val: 0.95 }
-              ].map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => setSmoothingAmount(p.val)}
-                  className={`py-1 text-[10px] rounded border transition-colors ${
-                    Math.abs(smoothingAmount - p.val) < 0.05
-                      ? 'bg-white text-black border-white font-bold'
-                      : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-[9px] text-gray-400">
-                <span>0% Direct Camera</span>
-                <span>100% Interpolated</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={smoothingAmount}
-                onChange={(e) => setSmoothingAmount(parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
-              />
-            </div>
-          </div>
+          <SmoothingControl value={smoothingAmount} onChange={setSmoothingAmount} />
 
           {/* Line Reliability Controls */}
           <div className="bg-[#15171C] p-3.5 rounded border border-white/10">
