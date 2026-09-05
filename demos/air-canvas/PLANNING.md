@@ -1,34 +1,29 @@
-# 📅 [SYS.01] Data Matrix & Visual Synthesis Roadmap
+# 📅 Air Canvas Roadmap
 
-## 🟢 Operational Tools
-*   **3D Coordinate Matrix:** Raw 21-joint 3D hand landmarks, basis orientation vectors, pinch distance, and interactive hologram manipulation.
-*   **Default Analysis Telemetry Suite:** Enabled all measurement tools by default (Basis RGB vectors, palm distance, finger span, thumb gap, pinky gap, body center estimation).
-*   **NASA Telemetry Typography:** Replaced emojis in gesture classifiers with high-contrast mission status text.
-*   **Kinetic Pinch Tracer (Air Canvas):**
-    *   Right Hand Pinch (<30px): Renders continuous luminous strokes.
-    *   Left Hand Pinch (<30px): Emits drifting physical spark particles.
-    *   Instant canvas wipe and active pinch indicator HUD.
-*   **Air-Touch Dwell Clear Button (Hands-Free):** Interactive HUD target in upper canvas; holding any index fingertip within target zone for 1.5 seconds charges a circular progress ring and clears all strokes and sparks without mouse interaction.
-*   **High-Contrast Monochromatic Drop Shadows:** All vector connectors, distance indicators, basis vectors, and text labels render with a dark drop shadow (`rgba(0,0,0,0.85)`) to eliminate visual clash and tangling as hands whip across the screen.
-*   **Docked Hologram Target:** Compact 3D object resting in corner space that can be grabbed and translated across the camera field of view via pinch kinematics.
+## 🟢 Current Implementation
+
+*   **Kinetic Pinch Tracer:** Right hand pinch (<30px) renders continuous luminous strokes; left hand pinch selects/moves lines or deletes on hold.
+*   **Air-Touch Dwell Controls:** Index fingertip dwell in upper canvas region (1.5s charge time) triggers undo or full canvas clear with visual progress ring.
+*   **Line Smoothing Engine:** Global post-draw relaxation reduces jitter; Line Reliability slider interpolates sparse points and bridges tracking dropouts.
+*   **Shared Rendering Loop:** Uses `useHandRenderLoop` and `resolveHands` from components/shared for stable 60fps canvas refresh with mirrored video.
 
 ---
 
-## 💡 Planned Visual & Generative Prototypes
+## 💡 Planned Enhancements
 
-### 1. Chromatic Fractal Sandbox
-*   **Concept:** Real-time WebGL shader rendering a complex Mandelbrot or Julia fractal set.
-*   **Optical Mapping:**
-    *   *Span (Distance between hands):* Governs fractal zoom depth and scale.
-    *   *Pinch Distance:* Adjusts color spectrum cycling and palette gradient interpolation.
-    *   *Wrist Rotation (Roll):* Rotates the fractal complex coordinate plane in real time.
+### 1. Multi-Stroke Undo Stack
+*   **Concept:** Maintain full undo history with per-stroke granularity instead of canvas-wide clear.
+*   **Implementation:** Store stroke sequence in state; dwell/gesture pops one stroke at a time.
 
-### 2. Spatial Theremin Synthesizer
-*   **Concept:** Pure optical electronic instrument mimicking the classic Leon Theremin setup without physical contact.
-*   **Optical Mapping:**
-    *   *Right Hand Elevation (Y-axis):* Continuous pitch control across 4 octaves.
-    *   *Left Hand Proximity (Z-axis):* Amplitude, low-pass filter cutoff, and resonance modulation.
+### 2. Color & Brush Variants
+*   **Concept:** Gesture or UI controls to vary stroke color, thickness, and glow intensity.
+*   **Implementation:** Map hand position or secondary pinch distance to visual parameters.
 
-### 3. Latency & Jitter Scope
-*   **Concept:** Oscilloscope readout calculating Euclidean landmark variance when holding hands stationary to benchmark camera framerates and test smoothing filters.
+### 3. Drawing Persistence & Export
+*   **Concept:** Save canvas state to local storage or export strokes as SVG vector paths.
+*   **Implementation:** Serialize stroke point arrays; add export UI button.
+
+### 4. Collaborative Canvas
+*   **Concept:** Transmit pinch traces to other connected clients in real time.
+*   **Implementation:** WebSocket or WebRTC bridge to sync hand state and render events.
 

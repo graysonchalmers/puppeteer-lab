@@ -19,7 +19,7 @@ export function useHandRenderLoop(
   videoRef: React.RefObject<HTMLVideoElement>,
   active: boolean,
   isCameraReady: boolean,
-  drawFrame: (frame: RenderFrame) => void
+  drawFrame: (frame: RenderFrame) => void // Must be memoized with useCallback; included in effect deps to restart loop on definition change
 ): void {
   useEffect(() => {
     if (!active) return;

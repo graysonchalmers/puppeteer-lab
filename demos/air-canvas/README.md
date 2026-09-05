@@ -1,15 +1,14 @@
-# 👁️ Data Visualizer
+# 🎨 Air Canvas
 
-**Data Visualizer** is a diagnostic tool designed to inspect the raw output of the MediaPipe Hand Landmarker. It is essential for debugging tracking issues, latency, and coordinate mapping algorithms.
+**Air Canvas** is a gesture-driven drawing demo. Use hand pinches to draw glowing vector lines, manipulate them in real time, and refine the drawing with smoothing controls.
 
 ## 📊 Features
-*   **Video Feed Overlay:** See the webcam input with skeletal overlays.
-*   **Raw Metric Dashboard:** View real-time X/Y/Z coordinates and velocity.
-*   **Feature Testers:**
-    *   **Pinch Detection:** Visualizes distance between Thumb and Index finger.
-    *   **Hand State:** Detects Open vs Closed palm states.
-    *   **Orientation:** Visualizes the palm normal vector.
+*   **Right-Hand Drawing:** Pinch thumb and index finger (distance < 30px) to draw continuous luminous strokes on the canvas.
+*   **Left-Hand Manipulation:** Pinch to select and move a line, or hold still over a line to delete it.
+*   **Air-Touch Controls:** Hold any index fingertip in the upper canvas region for 1.5 seconds to undo or clear the canvas (visual progress ring shows charge state).
+*   **Global Smoothing:** Adjust post-draw line relaxation to reduce jitter without affecting responsiveness during drawing.
+*   **Line Reliability:** Interpolates sparse tracking points, bridges brief tracking dropouts, and applies final smoothing after release.
 
 ## 🛠️ Components
-*   **Entry Point:** `DebugView.tsx`
-*   **Helper:** `WebcamPreview.tsx` (Used here and in other demos for 2D overlay).
+*   **Entry Point:** `components/aircanvas/AirCanvas.tsx`
+*   **Shared Engine:** `components/shared` provides `resolveHands` (hand tracking state), `useHandRenderLoop` (canvas loop), and camera integration with the Hand Telemetry demo.
