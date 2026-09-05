@@ -45,7 +45,7 @@ interface DemoSection {
 
 const DEMO_SECTIONS: DemoSection[] = [
   {
-    id: 'debug',
+    id: 'aircanvas',
     tag: 'SPATIAL DRAWING',
     tagColor: 'text-[#38BDF8] border-[#38BDF8]/30 bg-[#38BDF8]/10',
     title: 'Air Canvas',

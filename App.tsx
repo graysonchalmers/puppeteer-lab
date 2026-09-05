@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import DemoHub from './components/DemoHub';
 import RhythmGame from './components/RhythmGame';
 import DebugView from './components/DebugView';
+import AirCanvas from './components/aircanvas/AirCanvas';
 import MotionRecorder from './components/MotionRecorder';
 import FaceDemo from './components/FaceDemo';
 import { AppMode } from './types';
@@ -25,6 +26,10 @@ const App: React.FC = () => {
 
       {mode === 'debug' && (
         <DebugView onBack={() => setMode('home')} />
+      )}
+
+      {mode === 'aircanvas' && (
+        <AirCanvas onBack={() => setMode('home')} />
       )}
 
       {mode === 'recorder' && (
