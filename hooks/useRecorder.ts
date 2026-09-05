@@ -26,6 +26,7 @@ export const useRecorder = (type: TrackingType) => {
     const audioChunksRef = useRef<Blob[]>([]);
     const audioUrlRef = useRef<string | null>(null);
     const audioBase64Ref = useRef<string | null>(null);
+    const audioBlobRef = useRef<Blob | null>(null);
     const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
     // Cleanup audio on unmount
@@ -59,6 +60,7 @@ export const useRecorder = (type: TrackingType) => {
         }
         audioUrlRef.current = null;
         audioBase64Ref.current = null;
+        audioBlobRef.current = null;
         setHasAudio(false);
 
         if (audioElementRef.current) {
@@ -97,6 +99,7 @@ export const useRecorder = (type: TrackingType) => {
                             if (audioBlob.size > 0) {
                                 const url = URL.createObjectURL(audioBlob);
                                 audioUrlRef.current = url;
+                                audioBlobRef.current = audioBlob;
                                 setHasAudio(true);
 
                                 // Convert to base64 for persistent JSON export
@@ -268,7 +271,11 @@ export const useRecorder = (type: TrackingType) => {
                 durationSeconds: bufferRef.current.length > 0 ? bufferRef.current[bufferRef.current.length - 1].timestamp / 1000 : 0,
                 frames: bufferRef.current.map(f => ({
                     timestampMs: f.timestamp,
-                    handLandmarks: f.handLandmarks,
+                    // World-space 3D hand coordinates (the primary mocap output from Motion Recorder)
+                    leftHand: f.leftHand,
+                    rightHand: f.rightHand,
+                    // Raw MediaPipe hand landmarks (captured by the Air Canvas / Data Visualizer view)
+                    handLandmarks: f.landmarks,
                     faceLandmarks: f.faceLandmarks,
                     blendshapes: f.blendshapes
                 }))
@@ -330,7 +337,10 @@ export const useRecorder = (type: TrackingType) => {
                 setIsPlaying(false);
                 setIsRecording(false);
 
-                // Load synchronized audio if present
+                // Load synchronized audio if present.
+                // A loaded session has no live Blob, so clear audioBlobRef and let
+                // audio export fall through to the base64 decode path.
+                audioBlobRef.current = null;
                 if (json.audioBase64) {
                     audioBase64Ref.current = json.audioBase64;
                     audioUrlRef.current = json.audioBase64;
