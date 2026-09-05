@@ -21,6 +21,9 @@ jobs:
       - name: Install (clean)
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Unit tests
         run: npm test
 
@@ -28,8 +31,5 @@ jobs:
         run: npm run build
 
       # Headless build smoke: bundle integrity + secret-leak guard.
-      # We intentionally do NOT run `tsc --noEmit` here: there is one known,
-      # pre-existing type error (types.ts canvas: any) that the Vite build
-      # ignores, so gating CI on tsc would fail on unrelated legacy code.
       - name: Smoke (build output)
         run: node scripts/smoke.mjs

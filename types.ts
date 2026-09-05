@@ -112,7 +112,10 @@ declare global {
       meshPhysicalMaterial: any;
       meshNormalMaterial: any;
       primitive: any;
-      canvas: any;
+      // NB: no `canvas` here on purpose. Lowercase <canvas> is the real HTML
+      // element already typed by React; redeclaring it as `any` collides
+      // (TS2717). R3F's drawing surface is the capitalised <Canvas> component
+      // import, and the index signature below covers the lowercase R3F elements.
       [elemName: string]: any;
     }
   }
