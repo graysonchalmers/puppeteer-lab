@@ -8,6 +8,19 @@ export interface StrokePoint {
   y: number;
 }
 
+/**
+ * A drawn stroke carries two buffers: `raw` (exactly what the hand gave us,
+ * the source of truth for re-smoothing and manipulation) and `display` (the
+ * smoothed geometry actually rendered, which eases toward its target so the
+ * trail visibly relaxes). `settleMsLeft` counts down the post-commit window
+ * during which `display` is still easing toward its smoothed target.
+ */
+export interface Stroke {
+  raw: StrokePoint[];
+  display: StrokePoint[];
+  settleMsLeft: number;
+}
+
 export interface TracerParticle {
   x: number;
   y: number;
@@ -142,7 +155,7 @@ export const handleLeftHandStrokeInteraction = (
   pinchX: number,
   pinchY: number,
   isPinching: boolean,
-  completedStrokes: StrokePoint[][],
+  completedStrokes: Stroke[],
   state: LeftHandGrabState,
   particles: TracerParticle[],
   dtSeconds: number
@@ -160,7 +173,8 @@ export const handleLeftHandStrokeInteraction = (
     let closestDist = 48; // Grab proximity threshold in pixels
 
     for (let i = completedStrokes.length - 1; i >= 0; i--) {
-      const d = distToStroke(pinchX, pinchY, completedStrokes[i]);
+      // Hit-test against the displayed geometry, since that is what the user sees.
+      const d = distToStroke(pinchX, pinchY, completedStrokes[i].display);
       if (d < closestDist) {
         closestDist = d;
         closestIndex = i;
@@ -193,6 +207,19 @@ export const handleLeftHandStrokeInteraction = (
     const dx = pinchX - state.lastPinchX;
     const dy = pinchY - state.lastPinchY;
 
+    // Rigid translation moves both buffers so the smoothed shape is preserved
+    // and future re-smoothing of the raw points stays correct.
+    const translateStroke = (mdx: number, mdy: number) => {
+      for (const p of stroke.raw) {
+        p.x += mdx;
+        p.y += mdy;
+      }
+      for (const p of stroke.display) {
+        p.x += mdx;
+        p.y += mdy;
+      }
+    };
+
     // Check displacement from anchor to determine if moving or holding still
     const distFromAnchor = Math.hypot(pinchX - state.holdAnchorX, pinchY - state.holdAnchorY);
 
@@ -202,11 +229,7 @@ export const handleLeftHandStrokeInteraction = (
       state.holdAnchorX = pinchX;
       state.holdAnchorY = pinchY;
 
-      // Translate all points in this stroke
-      for (let i = 0; i < stroke.length; i++) {
-        stroke[i].x += dx;
-        stroke[i].y += dy;
-      }
+      translateStroke(dx, dy);
 
       state.lastPinchX = pinchX;
       state.lastPinchY = pinchY;
@@ -221,10 +244,7 @@ export const handleLeftHandStrokeInteraction = (
       state.holdDurationMs += dtSeconds * 1000;
 
       // Apply small incremental translation to keep feel smooth
-      for (let i = 0; i < stroke.length; i++) {
-        stroke[i].x += dx;
-        stroke[i].y += dy;
-      }
+      translateStroke(dx, dy);
       state.lastPinchX = pinchX;
       state.lastPinchY = pinchY;
 
@@ -257,14 +277,18 @@ export const handleLeftHandStrokeInteraction = (
  */
 export const renderStrokes = (
   ctx: CanvasRenderingContext2D,
-  completedStrokes: StrokePoint[][],
-  currentStroke: StrokePoint[],
+  completedStrokes: Stroke[],
+  currentDisplay: StrokePoint[],
   primaryColor = '#EE3B2B',
   grabbedIndex: number | null = null,
   grabHoldProgress = 0,
   leftPinchPos: { x: number; y: number } | null = null
 ) => {
-  const allStrokes = currentStroke.length > 1 ? [...completedStrokes, currentStroke] : completedStrokes;
+  // Render each completed stroke's smoothed display buffer, then the live one.
+  const allStrokes: StrokePoint[][] = completedStrokes.map((s) =>
+    s.display.length > 1 ? s.display : s.raw
+  );
+  if (currentDisplay.length > 1) allStrokes.push(currentDisplay);
   if (allStrokes.length === 0) return;
 
   ctx.save();
