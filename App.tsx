@@ -9,6 +9,7 @@ import DemoHub from './components/DemoHub';
 import RhythmGame from './components/RhythmGame';
 import DebugView from './components/DebugView';
 import AirCanvas from './components/aircanvas/AirCanvas';
+import HandTelemetry from './components/telemetry/HandTelemetry';
 import MotionRecorder from './components/MotionRecorder';
 import FaceDemo from './components/FaceDemo';
 import { AppMode } from './types';
@@ -30,6 +31,10 @@ const App: React.FC = () => {
 
       {mode === 'aircanvas' && (
         <AirCanvas onBack={() => setMode('home')} />
+      )}
+
+      {mode === 'telemetry' && (
+        <HandTelemetry onBack={() => setMode('home')} />
       )}
 
       {mode === 'recorder' && (

@@ -73,6 +73,22 @@ const DEMO_SECTIONS: DemoSection[] = [
     buttonHoverBg: 'hover:bg-[#38BDF8] hover:text-black'
   },
   {
+    id: 'telemetry',
+    tag: 'HAND TELEMETRY',
+    tagColor: 'text-white border-white/30 bg-white/10',
+    title: 'Hand Telemetry',
+    description: 'Full diagnostic view: skeleton, distances, confidence, and 3D readouts.',
+    icon: <Sliders size={18} className="text-white" />,
+    highlights: [
+      { icon: <Sliders size={13} className="text-white" />, title: 'Skeleton & HUD', detail: 'Landmarks, connectors, bounding boxes, and basis vectors.' },
+      { icon: <Move size={13} className="text-[#38BDF8]" />, title: 'Inter-Hand Distances', detail: 'Palm, finger, thumb, and pinky separation readouts.' },
+      { icon: <RotateCcw size={13} className="text-amber-400" />, title: 'Confidence & Smoothing', detail: 'Gate low-confidence hands; tune the smoothing filter.' }
+    ],
+    actionLabel: 'Open Telemetry',
+    accentColor: 'hover:border-white/50',
+    buttonHoverBg: 'hover:bg-white hover:text-black'
+  },
+  {
     id: 'game',
     tag: 'TEMPO STRIKE',
     tagColor: 'text-[#EE3B2B] border-[#EE3B2B]/30 bg-[#EE3B2B]/10',
@@ -205,12 +221,12 @@ const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
             Select a live demo powered by your standard webcam:
           </p>
           <span className="font-mono text-[11px] text-gray-500">
-            4 Interactive Demos
+            5 Interactive Demos
           </span>
         </div>
 
-        {/* 4 Cards Grid - Natural balanced height, no excessive stretching */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+        {/* 5 Cards Grid - Natural balanced height, no excessive stretching */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-stretch">
           {DEMO_SECTIONS.map((section) => (
             <div
               key={section.id}

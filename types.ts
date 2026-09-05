@@ -15,7 +15,7 @@ export enum GameStatus {
   VICTORY = 'VICTORY'
 }
 
-export type AppMode = 'home' | 'game' | 'debug' | 'aircanvas' | 'recorder' | 'face';
+export type AppMode = 'home' | 'game' | 'debug' | 'aircanvas' | 'telemetry' | 'recorder' | 'face';
 
 export type HandType = 'left' | 'right';
 
