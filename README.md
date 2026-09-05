@@ -86,7 +86,7 @@ To map this to a 3D Three.js scene (where 0,0 is the center of the screen):
 3.  **Inverting Y:** 3D space usually has +Y as "up", but screen space has +Y as "down".
 
 ```typescript
-const mapHandToWorld = (x: number, y: number): THREE.Vector3 => {
+const mapHandToWorld = (x: number, y: number, z: number = 0): THREE.Vector3 => {
   const GAME_X_RANGE = 5; 
   const GAME_Y_RANGE = 3.5;
   const Y_OFFSET = 0.8; // Adjust based on camera height
@@ -97,8 +97,9 @@ const mapHandToWorld = (x: number, y: number): THREE.Vector3 => {
   // (1.0 - y) flips the axis so Up is Up
   const worldY = (1.0 - y) * GAME_Y_RANGE - (GAME_Y_RANGE / 2) + Y_OFFSET;
 
-  // Optional: Add fake depth based on height for a more dynamic feel
-  const worldZ = -Math.max(0, worldY * 0.2);
+  // Depth: `z` is the hand's deviation from its baseline size (positive = closer,
+  // negative = farther). Scale it up so movement toward/away reads in the world.
+  const worldZ = z * 8;
 
   return new THREE.Vector3(worldX, Math.max(0.1, worldY), worldZ);
 };
