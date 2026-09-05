@@ -45,16 +45,21 @@ describe('resolveHands', () => {
   });
 
   // Partial handedness: two hands detected, but the model only labelled the
-  // first (as Left). The unlabelled second hand SHOULD take the OTHER side,
-  // not overwrite Left. Today it falls back to `index === 0` (false = Left)
-  // and clobbers the first hand's assignment, so `right` stays null and both
-  // hands collapse onto Left. This is a KNOWN BUG, tracked with `it.fails`:
-  // this test passes only while the bug still reproduces, and will start
-  // failing the instant the fallback is fixed, prompting a flip back to `it`.
-  it.fails('does not collapse two hands onto one side when handedness is partial', () => {
+  // first (as Left). The unlabelled second hand takes the OTHER (free) side
+  // instead of overwriting Left, so both hands survive with distinct sides.
+  it('does not collapse two hands onto one side when handedness is partial', () => {
     const r = resolveHands([hand('a'), hand('b')], [leftHandedness], 0.5, false);
     expect(r.drawnCount).toBe(2);
     expect(r.left).toEqual(hand('a'));
     expect(r.right).toEqual(hand('b'));
+  });
+
+  // Symmetric case: only the first hand is labelled Right, so the unlabelled
+  // second hand should fall to Left rather than clobbering Right.
+  it('assigns the unlabelled hand to Left when the labelled one took Right', () => {
+    const r = resolveHands([hand('a'), hand('b')], [rightHandedness], 0.5, false);
+    expect(r.drawnCount).toBe(2);
+    expect(r.right).toEqual(hand('a'));
+    expect(r.left).toEqual(hand('b'));
   });
 });
