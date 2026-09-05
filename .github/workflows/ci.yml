@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install (clean)
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Headless build smoke: bundle integrity + secret-leak guard.
+      # We intentionally do NOT run `tsc --noEmit` here: there is one known,
+      # pre-existing type error (types.ts canvas: any) that the Vite build
+      # ignores, so gating CI on tsc would fail on unrelated legacy code.
+      - name: Smoke (build output)
+        run: node scripts/smoke.mjs

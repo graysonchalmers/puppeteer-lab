@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "vite build && node scripts/smoke.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.9",
