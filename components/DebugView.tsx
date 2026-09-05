@@ -29,7 +29,7 @@ import { useMediaPipe } from '../hooks/useMediaPipe';
 import { COLORS } from '../types';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
-import InteractiveObject from './debug/InteractiveObject';
+import InteractiveObject from './telemetry/InteractiveObject';
 import {
   drawHudOverlay,
   drawConnectors,
@@ -40,8 +40,8 @@ import {
   drawCenterEstimate,
   drawHandStateLabel,
   drawBasisVectors
-} from './debug/drawingHelpers';
-import { calculatePinchDistance, analyzeGesture } from './debug/gestureAnalysis';
+} from './telemetry/drawingHelpers';
+import { calculatePinchDistance, analyzeGesture } from './shared/gestureAnalysis';
 import {
   StrokePoint,
   Stroke,
@@ -53,13 +53,13 @@ import {
   renderStrokes,
   renderPinchReticle,
   renderAirTouchControls
-} from './debug/pinchTracer';
+} from './aircanvas/pinchTracer';
 import {
   reliabilityParams,
   resampleAndSmooth,
   relaxToward,
   bridgeGap
-} from './debug/lineReliability';
+} from './aircanvas/lineReliability';
 
 interface DebugViewProps {
   onBack: () => void;
