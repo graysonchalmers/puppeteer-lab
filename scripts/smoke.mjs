@@ -51,4 +51,18 @@ if (checkedBytes < MIN_BUNDLE_BYTES) {
 const referencesAsset = jsAssets.some((f) => indexHtml.includes(f)) || /assets\/.+\.js/.test(indexHtml);
 if (!referencesAsset) fail('dist/index.html does not reference any JS asset');
 
-console.log(`SMOKE OK: index.html + ${jsAssets.length} JS asset(s), ${checkedBytes} bytes, no secret leak.`);
+// 4. Vendored MediaPipe assets ship in dist (offline-first, TDD-004).
+const REQUIRED_ASSETS = [
+  'mediapipe/wasm/vision_wasm_internal.js',
+  'mediapipe/wasm/vision_wasm_internal.wasm',
+  'mediapipe/wasm/vision_wasm_nosimd_internal.js',
+  'mediapipe/wasm/vision_wasm_nosimd_internal.wasm',
+  'mediapipe/models/hand_landmarker.task',
+  'mediapipe/models/face_landmarker.task',
+];
+for (const rel of REQUIRED_ASSETS) {
+  const p = join(DIST, rel);
+  if (!existsSync(p) || statSync(p).size < 100_000) fail(`vendored asset missing or tiny: ${rel}`);
+}
+
+console.log(`SMOKE OK: index.html + ${jsAssets.length} JS asset(s), ${checkedBytes} bytes, no secret leak, vendored assets present.`);

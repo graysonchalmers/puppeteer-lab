@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HandLandmarker, FilesetResolver, HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import * as THREE from 'three';
 import { smoothLandmarks, LandmarkLike } from '../components/shared/smoothing';
+import { MEDIAPIPE_WASM_PATH, HAND_MODEL_PATH } from './mediapipeAssets';
 
 // Mapping 2D normalized coordinates to 3D game world.
 export const mapHandToWorld = (x: number, y: number, z: number = 0): THREE.Vector3 => {
@@ -81,14 +82,14 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
     const setupMediaPipe = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
+          MEDIAPIPE_WASM_PATH
         );
-        
+
         if (!isActive) return;
 
         const landmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+            modelAssetPath: HAND_MODEL_PATH,
             delegate: "GPU"
           },
           runningMode: "VIDEO",

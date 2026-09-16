@@ -6,6 +6,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { FaceLandmarker, FilesetResolver, FaceLandmarkerResult } from '@mediapipe/tasks-vision';
+import { MEDIAPIPE_WASM_PATH, FACE_MODEL_PATH } from './mediapipeAssets';
 
 export const useFaceTracker = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -22,14 +23,14 @@ export const useFaceTracker = (videoRef: React.RefObject<HTMLVideoElement | null
     const setupMediaPipe = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
+          MEDIAPIPE_WASM_PATH
         );
-        
+
         if (!isActive) return;
 
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+            modelAssetPath: FACE_MODEL_PATH,
             delegate: "GPU"
           },
           outputFaceBlendshapes: true, // CRITICAL: Enables 'smile', 'blink' scores
