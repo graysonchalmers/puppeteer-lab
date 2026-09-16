@@ -36,6 +36,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const recorder = useRecorder('FACE');
 
   const [blendshapes, setBlendshapes] = useState<Record<string, number>>({});
+  const lastBlendMsRef = useRef(0);
   const [showPip, setShowPip] = useState<boolean>(true);
   const [showGazeRays, setShowGazeRays] = useState<boolean>(true);
   const [showMocapDots, setShowMocapDots] = useState<boolean>(true);
@@ -132,7 +133,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               }
 
               // Update React UI state
-              setBlendshapes(currentBlendshapesRecord);
+              // 10 Hz: sidebar readout, not the render path
+              const nowMs = performance.now();
+              if (nowMs - lastBlendMsRef.current >= 100) {
+                  lastBlendMsRef.current = nowMs;
+                  setBlendshapes(currentBlendshapesRecord);
+              }
           }
           animationFrameId = requestAnimationFrame(render);
       };

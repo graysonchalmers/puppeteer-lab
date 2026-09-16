@@ -8,7 +8,7 @@
  * tracking dropouts, and let the drawn trail visibly relax toward a smoothed
  * shape over time. They are deliberately free of React and canvas so they can
  * be unit-tested in isolation. The stateful capture loop that drives them lives
- * in DebugView; the per-frame velocity bridging and settling are wired there.
+ * in AirCanvas.tsx (drawFrame); the per-frame velocity bridging and settling are wired there.
  */
 
 export interface Pt {

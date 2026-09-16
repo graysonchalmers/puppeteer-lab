@@ -5,7 +5,6 @@
 */
 
 import * as THREE from 'three';
-import React from 'react';
 
 export enum GameStatus {
   LOADING = 'LOADING',
@@ -80,43 +79,4 @@ export interface RecordingSession {
     audioBase64?: string; // Synchronized audio data URL (data:audio/webm;base64,...)
     audioMimeType?: string;
     hasAudio?: boolean;
-}
-
-
-// Type augmentation for React Three Fiber elements to fix JSX.IntrinsicElements errors
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      ambientLight: any;
-      pointLight: any;
-      spotLight: any;
-      directionalLight: any;
-      color: any;
-      fog: any;
-      mesh: any;
-      group: any;
-      position: any;
-      gridHelper: any;
-      sphereGeometry: any;
-      boxGeometry: any;
-      planeGeometry: any;
-      cylinderGeometry: any;
-      capsuleGeometry: any;
-      torusGeometry: any;
-      ringGeometry: any;
-      extrudeGeometry: any;
-      octahedronGeometry: any;
-      icosahedronGeometry: any;
-      meshStandardMaterial: any;
-      meshBasicMaterial: any;
-      meshPhysicalMaterial: any;
-      meshNormalMaterial: any;
-      primitive: any;
-      // NB: no `canvas` here on purpose. Lowercase <canvas> is the real HTML
-      // element already typed by React; redeclaring it as `any` collides
-      // (TS2717). R3F's drawing surface is the capitalised <Canvas> component
-      // import, and the index signature below covers the lowercase R3F elements.
-      [elemName: string]: any;
-    }
-  }
 }

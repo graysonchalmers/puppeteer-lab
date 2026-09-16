@@ -80,6 +80,7 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
   const gainRef = useRef<GainNode | null>(null);
 
   const [metrics, setMetrics] = useState<any>({});
+  const lastMetricsMsRef = useRef(0);
 
   // Dynamic Smoothing
   useEffect(() => {
@@ -136,7 +137,7 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
   // Per-frame draw: reads toggles as closure state but reads live/playback
   // landmark data and audio nodes through refs, so this callback only
   // changes identity when a toggle actually changes, not every frame.
-  const drawFrame = useCallback(({ canvas, ctx }: RenderFrame) => {
+  const drawFrame = useCallback(({ canvas, ctx, nowMs }: RenderFrame) => {
     const handPos = handPositionsRef.current;
 
     drawHudOverlay(ctx, canvas.width, canvas.height);
@@ -241,7 +242,9 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
       }
     }
 
-    if (!recorder.isPlaying) {
+    // 10 Hz: sidebar readout, not the render path
+    if (!recorder.isPlaying && nowMs - lastMetricsMsRef.current >= 100) {
+      lastMetricsMsRef.current = nowMs;
       setMetrics({
         handsDetected: drawnCount,
         leftPos: handPos.left

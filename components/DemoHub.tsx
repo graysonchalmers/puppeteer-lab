@@ -92,7 +92,7 @@ const DEMO_SECTIONS: DemoSection[] = [
     id: 'game',
     tag: 'TEMPO STRIKE',
     tagColor: 'text-[#EE3B2B] border-[#EE3B2B]/30 bg-[#EE3B2B]/10',
-    title: 'Games',
+    title: 'Tempo Strike',
     description: 'Fast-paced 3D spatial gaming where your physical hands become dual light sabers.',
     icon: <Gamepad2 size={18} className="text-[#EE3B2B]" />,
     highlights: [
@@ -112,7 +112,7 @@ const DEMO_SECTIONS: DemoSection[] = [
         detail: 'Swing faster for bonus points; chain streaks for multipliers.'
       }
     ],
-    actionLabel: 'Play Games',
+    actionLabel: 'Play Tempo Strike',
     accentColor: 'hover:border-[#EE3B2B]/50',
     buttonHoverBg: 'hover:bg-[#EE3B2B] hover:text-white'
   },
