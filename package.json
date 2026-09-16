@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/vendor-assets.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
-    "version": "node scripts/build-stamp.mjs --print"
+    "stamp": "node scripts/build-stamp.mjs --print"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.9",

@@ -10,6 +10,7 @@ import { Circle, Square, Play, Pause, Download, Upload, ChevronDown, Music, Acti
 interface RecorderControlsProps {
     isRecording: boolean;
     isPlaying: boolean;
+    isPaused: boolean;
     hasData: boolean;
     frameCount: number;
     hasAudio?: boolean;
@@ -18,6 +19,7 @@ interface RecorderControlsProps {
     onRecord: () => void;
     onStop: () => void;
     onPlayToggle: () => void;
+    onStopPlayback: () => void;
     onScrubStart: () => void;
     onScrub: (ms: number) => void;
     onScrubEnd: () => void;
@@ -44,6 +46,7 @@ const PlaybackClock: React.FC<{ getTimeMs: () => number; durationMs: number; act
 const RecorderControls: React.FC<RecorderControlsProps> = ({
     isRecording,
     isPlaying,
+    isPaused,
     hasData,
     frameCount,
     hasAudio,
@@ -52,6 +55,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     onRecord,
     onStop,
     onPlayToggle,
+    onStopPlayback,
     onScrubStart,
     onScrub,
     onScrubEnd,
@@ -106,18 +110,29 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 )}
 
                 {/* Play / Pause */}
-                <button 
+                <button
                     onClick={onPlayToggle}
                     disabled={!hasData || isRecording}
                     className={`w-11 h-11 rounded-full border flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
-                        isPlaying 
-                        ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.4)]' 
+                        isPlaying && !isPaused
+                        ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.4)]'
                         : 'bg-white/5 border-white/20 text-white hover:bg-white/15'
                     }`}
-                    title={isPlaying ? "Pause" : "Play Replay"}
+                    title={isPaused ? "Resume" : isPlaying ? "Pause" : "Play Replay"}
                 >
-                    {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} className="ml-0.5" />}
+                    {isPlaying && !isPaused ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} className="ml-0.5" />}
                 </button>
+
+                {/* Stop playback: one-click exit back to live view */}
+                {isPlaying && (
+                    <button
+                        onClick={onStopPlayback}
+                        className="w-11 h-11 rounded-full bg-white/5 hover:bg-white/15 border border-white/20 text-white flex items-center justify-center transition-all"
+                        title="Stop playback, back to live"
+                    >
+                        <Square fill="currentColor" size={14} />
+                    </button>
+                )}
             </div>
 
             {/* Scrubber */}

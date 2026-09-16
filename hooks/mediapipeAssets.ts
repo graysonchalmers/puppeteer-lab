@@ -2,7 +2,8 @@
  * One place for MediaPipe asset locations. Default is the vendored copy under
  * public/ (offline). Set VITE_MEDIAPIPE_CDN=1 to fall back to the CDNs.
  */
-const CDN = Boolean(import.meta.env.VITE_MEDIAPIPE_CDN);
+const v = import.meta.env.VITE_MEDIAPIPE_CDN;
+const CDN = v === '1' || v === 'true';
 
 export const MEDIAPIPE_WASM_PATH = CDN
   ? 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm'

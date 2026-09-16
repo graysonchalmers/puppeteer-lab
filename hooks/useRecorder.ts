@@ -17,9 +17,12 @@ export function findFrameIndex(frames: { timestamp: number }[], t: number): numb
     return ans;
 }
 
+// Exported recordings carry landmarks smoothed at whatever the Global Smoothing
+// slider was set to during capture (RAW = unsmoothed).
 export const useRecorder = (type: TrackingType) => {
     const [isRecording, setIsRecording] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const [frameCount, setFrameCount] = useState(0);
     const [hasAudio, setHasAudio] = useState(false);
     
@@ -74,6 +77,7 @@ export const useRecorder = (type: TrackingType) => {
         setDurationMs(0);
         pausedRef.current = false;
         setIsPlaying(false);
+        setIsPaused(false);
         setIsRecording(true);
         startTimeRef.current = performance.now();
 
@@ -150,6 +154,7 @@ export const useRecorder = (type: TrackingType) => {
 
     const stopRecording = useCallback(() => {
         setIsRecording(false);
+        setIsPaused(false);
         setFrameCount(bufferRef.current.length);
         setDurationMs(lastTimestamp());
 
@@ -200,6 +205,7 @@ export const useRecorder = (type: TrackingType) => {
             if (pausedRef.current) {
                 // Play pressed while paused after a scrub: resume from there.
                 pausedRef.current = false;
+                setIsPaused(false);
                 playbackStartTimeRef.current = performance.now() - pausedAtMsRef.current;
                 audioElementRef.current?.play().catch(() => {});
                 return;
@@ -210,6 +216,7 @@ export const useRecorder = (type: TrackingType) => {
             setIsRecording(false);
             setIsPlaying(true);
             pausedRef.current = false;
+            setIsPaused(false);
             playbackStartTimeRef.current = performance.now();
             prepareAudio()?.play().catch(err => {
                 console.warn("Audio playback interrupted or blocked:", err);
@@ -228,7 +235,7 @@ export const useRecorder = (type: TrackingType) => {
         pausedAtMsRef.current = ms;
         playbackStartTimeRef.current = performance.now() - ms;
         if (audioElementRef.current && audioUrlRef.current) {
-            try { audioElementRef.current.currentTime = ms / 1000; } catch (e) {}
+            try { audioElementRef.current.currentTime = ms / 1000; } catch { /* seek before audio metadata is loaded */ }
         }
     }, []);
 
@@ -244,6 +251,7 @@ export const useRecorder = (type: TrackingType) => {
         }
         pausedAtMsRef.current = isPlaying ? getPlaybackTimeMs() : 0;
         pausedRef.current = true;
+        setIsPaused(true);
         audioElementRef.current?.pause();
     }, [isPlaying, getPlaybackTimeMs]);
 
@@ -251,8 +259,17 @@ export const useRecorder = (type: TrackingType) => {
         if (!resumeAfterScrubRef.current) return; // stay paused on the scrubbed frame
         resumeAfterScrubRef.current = false;
         pausedRef.current = false;
+        setIsPaused(false);
         playbackStartTimeRef.current = performance.now() - pausedAtMsRef.current;
         audioElementRef.current?.play().catch(() => {});
+    }, []);
+
+    /** Exit playback entirely: back to live view in one click. */
+    const stopPlayback = useCallback(() => {
+        setIsPlaying(false);
+        pausedRef.current = false;
+        setIsPaused(false);
+        audioElementRef.current?.pause();
     }, []);
 
     // Helper to get the current frame during playback
@@ -424,6 +441,7 @@ export const useRecorder = (type: TrackingType) => {
     return {
         isRecording,
         isPlaying,
+        isPaused,
         frameCount,
         hasAudio,
         durationMs,
@@ -431,6 +449,7 @@ export const useRecorder = (type: TrackingType) => {
         stopRecording,
         captureFrame,
         togglePlayback,
+        stopPlayback,
         getPlaybackTimeMs,
         beginScrub,
         scrubTo,

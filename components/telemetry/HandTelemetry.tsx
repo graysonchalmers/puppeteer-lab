@@ -323,6 +323,7 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
           <RecorderControls
             isRecording={recorder.isRecording}
             isPlaying={recorder.isPlaying}
+            isPaused={recorder.isPaused}
             hasData={recorder.hasData}
             frameCount={recorder.frameCount}
             hasAudio={recorder.hasAudio}
@@ -334,6 +335,7 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
             onRecord={recorder.startRecording}
             onStop={recorder.stopRecording}
             onPlayToggle={recorder.togglePlayback}
+            onStopPlayback={recorder.stopPlayback}
             onExport={recorder.exportData}
             onImport={recorder.loadData}
           />

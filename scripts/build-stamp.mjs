@@ -27,7 +27,17 @@ function resolve() {
   return deriveStamp(sha, date, version);
 }
 
-const stamp = resolve();
+// Local deviation from the reference implementation: a packaged environment
+// or a fresh checkout may have no git available. Fall back instead of
+// hard-failing the build.
+let stamp;
+try {
+  stamp = resolve();
+} catch (err) {
+  console.warn('[build-stamp] git unavailable, using fallback stamp:', err.message);
+  stamp = { stamp: 'dev/unknown', sha: '', shortSha: '', date: '', emoji: '', codeword: '', version: null };
+}
+
 if (process.argv.includes('--print')) {
   process.stdout.write(stamp.stamp + '\n');
 } else {
