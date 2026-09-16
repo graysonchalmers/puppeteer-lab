@@ -4,7 +4,7 @@
  * - Models: downloaded once into public/mediapipe/models (committed).
  * Usage: node scripts/vendor-assets.mjs [--dry-run]
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DRY = process.argv.includes('--dry-run');
@@ -34,6 +34,14 @@ for (const [name, url] of Object.entries(MODELS)) {
   console.log(`[vendor] downloading ${name} ...`);
   const res = await fetch(url);
   if (!res.ok) { console.error(`[vendor] download failed ${res.status} ${url}`); process.exit(1); }
-  writeFileSync(dst, Buffer.from(await res.arrayBuffer()));
+  const buf = Buffer.from(await res.arrayBuffer());
+  const expected = res.headers.get('content-length');
+  if (expected !== null && buf.length !== Number(expected)) {
+    console.error(`[vendor] download truncated for ${name}: got ${buf.length} B, expected ${expected} B (${url})`);
+    process.exit(1);
+  }
+  const tmp = `${dst}.part`;
+  writeFileSync(tmp, buf);
+  renameSync(tmp, dst);
   console.log(`[vendor] model: ${name} (${statSync(dst).size} B)`);
 }
