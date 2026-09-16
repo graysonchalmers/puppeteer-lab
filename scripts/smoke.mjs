@@ -65,4 +65,9 @@ for (const rel of REQUIRED_ASSETS) {
   if (!existsSync(p) || statSync(p).size < 100_000) fail(`vendored asset missing or tiny: ${rel}`);
 }
 
+// 5. Build stamp baked into the bundle (portfolio SOP).
+if (!jsAssets.some((f) => /· [0-9a-f]{6} · \d{4}-\d{2}-\d{2}/.test(readFileSync(join(ASSETS, f), 'utf8')))) {
+  fail('no build stamp found in any JS asset (expected "<emoji> WORD · <sha6> · <date>")');
+}
+
 console.log(`SMOKE OK: index.html + ${jsAssets.length} JS asset(s), ${checkedBytes} bytes, no secret leak, vendored assets present.`);

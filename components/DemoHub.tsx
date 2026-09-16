@@ -291,8 +291,10 @@ const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
           <span>•</span>
           <span className="hidden sm:inline">Zero-hardware tracking for games and media</span>
         </div>
-        <div className="text-gray-400">
-          Browser Native • Standard Webcam
+        <div className="text-gray-400 flex items-center gap-2">
+          <span>Browser Native • Standard Webcam</span>
+          <span className="text-gray-600">•</span>
+          <span title="Build stamp (commit-derived)">{__BUILD_STAMP__}</span>
         </div>
       </footer>
     </div>

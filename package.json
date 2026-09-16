@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/vendor-assets.mjs && vite build",
+    "build": "node scripts/build-stamp.mjs && node scripts/vendor-assets.mjs && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/vendor-assets.mjs",
-    "smoke": "npm run build && node scripts/smoke.mjs"
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "version": "node scripts/build-stamp.mjs --print"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.9",
