@@ -7,9 +7,9 @@
  * inverse path). No DOM, no Worker: everything here is plain data in, plain
  * data out, matching TDD-002 P1's synchronous scope.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Vector3 } from 'three';
-import { buildEnvelope, buildKinematics, serializeV3, migrateV2, parseDataUrl, toDataUrl, detectTrackingType } from './recordingSchema';
+import { buildEnvelope, buildKinematics, serializeV3, serializeV3Chunked, migrateV2, parseDataUrl, toDataUrl, detectTrackingType } from './recordingSchema';
 import { FrameData } from '../../types';
 
 // --- fixtures ---
@@ -329,5 +329,92 @@ describe('performance (TDD-002 P1 gate)', () => {
 
     expect(json.length).toBeGreaterThan(0);
     expect(elapsed).toBeLessThan(100);
+  });
+});
+
+describe('serializeV3Chunked (TDD-002 P2 fallback)', () => {
+  // createdAt is `new Date().toISOString()` per call, so a byte/deep compare
+  // against a synchronously-built envelope must exclude it or the assertion
+  // flakes on whichever millisecond the two calls happen to land on.
+  const stripCreatedAt = (obj: any) => {
+    const { createdAt, ...rest } = obj;
+    return rest;
+  };
+
+  it('matches buildEnvelope + serializeV3 for a small full export, ignoring createdAt', async () => {
+    const frames: FrameData[] = [
+      { timestamp: 0, landmarks: [handLandmarks(0), handLandmarks(0.3)] },
+      { timestamp: 16, landmarks: [handLandmarks(0), handLandmarks(0.3)] },
+    ];
+    const sync = JSON.parse(serializeV3(buildEnvelope(frames, 'HAND', { durationMs: 16 })));
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'full', { durationMs: 16 }));
+    expect(stripCreatedAt(chunked)).toEqual(stripCreatedAt(sync));
+  });
+
+  it('matches buildKinematics + serializeV3 for a small kinematics export, ignoring createdAt', async () => {
+    const frames: FrameData[] = [{ timestamp: 0, landmarks: [handLandmarks(0)] }];
+    const sync = JSON.parse(serializeV3(buildKinematics(frames, 'HAND', 0)));
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'kinematics', { durationMs: 0 }));
+    expect(stripCreatedAt(chunked)).toEqual(stripCreatedAt(sync));
+  });
+
+  it('attaches audio to a full export but a kinematics export never carries an audio field', async () => {
+    const frames: FrameData[] = [{ timestamp: 0, landmarks: [handLandmarks(0)] }];
+    const audio = { mimeType: 'audio/webm', base64: 'AAECAw==' };
+
+    const full = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'full', { durationMs: 0, audio }));
+    expect(full.audio).toEqual(audio);
+
+    const kinematics = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'kinematics', { durationMs: 0, audio }));
+    expect(kinematics.audio).toBeUndefined();
+  });
+
+  it('a full export with no audio serializes audio: null, matching buildEnvelope', async () => {
+    const frames: FrameData[] = [{ timestamp: 0, landmarks: [handLandmarks(0)] }];
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'full', { durationMs: 0 }));
+    expect(chunked.audio).toBeNull();
+  });
+
+  it('computes capture.fps/frameCount against the WHOLE take, not a chunk slice, at the 500-frame chunk boundary', async () => {
+    const frameCount = 500;
+    const frames: FrameData[] = Array.from({ length: frameCount }, (_, i) => ({ timestamp: (i * 1000) / 60 }));
+    const durationMs = frames[frameCount - 1].timestamp;
+    const expected = buildEnvelope(frames, 'HAND', { durationMs });
+
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'full', { durationMs }));
+    expect(chunked.capture.frameCount).toBe(frameCount);
+    expect(chunked.capture.fps).toBe(expected.capture.fps);
+  });
+
+  it('computes capture.fps/frameCount correctly across TWO chunk boundaries (1200 frames)', async () => {
+    const frameCount = 1200;
+    const frames: FrameData[] = Array.from({ length: frameCount }, (_, i) => ({ timestamp: (i * 1000) / 60 }));
+    const durationMs = frames[frameCount - 1].timestamp;
+    const expected = buildKinematics(frames, 'HAND', durationMs);
+
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'HAND', 'kinematics', { durationMs }));
+    expect(chunked.capture.frameCount).toBe(frameCount);
+    expect(chunked.capture.fps).toBe(expected.capture.fps);
+    expect(chunked.frames).toHaveLength(frameCount);
+  });
+
+  it('yields via setTimeout(0) every 500 frames - two yields for 1200 frames, none for a stub', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const frames: FrameData[] = Array.from({ length: 1200 }, (_, i) => ({ timestamp: i }));
+    await serializeV3Chunked(frames, 'HAND', 'full', { durationMs: 1200 });
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
+    setTimeoutSpy.mockRestore();
+  });
+
+  it('handles 0 frames without yielding and without NaN/Infinity fps', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const json = await serializeV3Chunked([], 'HAND', 'full', { durationMs: 0 });
+    const parsed = JSON.parse(json);
+    expect(parsed.capture.frameCount).toBe(0);
+    expect(parsed.capture.fps).toBe(0);
+    expect(Number.isFinite(parsed.capture.fps)).toBe(true);
+    expect(parsed.frames).toEqual([]);
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    setTimeoutSpy.mockRestore();
   });
 });

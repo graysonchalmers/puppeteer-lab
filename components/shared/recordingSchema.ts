@@ -26,6 +26,7 @@ import {
     RecordingV3Face,
     RecordingV3Side,
     RecordingV3World,
+    RecordingV3Audio,
     Vec3Tuple,
 } from '../../types';
 
@@ -202,6 +203,101 @@ export function buildKinematics(frames: FrameData[], type: TrackingType, duratio
 
 export function serializeV3(envelope: RecordingV3 | RecordingV3Kinematics): string {
     return JSON.stringify(envelope);
+}
+
+// --- Task 2: worker + fallback shared shapes (TDD-002 P2) ---
+
+/** Options shared by the worker request and the chunked fallback below.
+ * `audio` is not part of the brief's literal worker message shape, but is
+ * required to keep 'full' exports correct while moving frames->envelope->
+ * JSON.stringify off the main thread: useRecorder.ts still does the cheap
+ * parseDataUrl() synchronously on the main thread (per the task brief), then
+ * hands the already-parsed { mimeType, base64 } across as inert data so the
+ * worker/fallback can attach it to the envelope before the one expensive
+ * serializeV3 call, instead of re-parsing or re-stringifying on the main
+ * thread afterward. */
+export interface SerializeOpts {
+    durationMs: number;
+    video?: { width: number; height: number };
+    audio?: RecordingV3Audio;
+}
+
+export type SerializeKind = 'full' | 'kinematics';
+
+/** The exact message shape serialize.worker.ts's onmessage receives. */
+export interface SerializeRequest extends SerializeOpts {
+    frames: FrameData[];
+    type: TrackingType;
+    kind: SerializeKind;
+}
+
+// A string-literal discriminant, not boolean `ok: true | false`: this local
+// TS 5.8.3 install does not narrow a `{ok: true; ...} | {ok: false; ...}`
+// union on `if (x.ok)` (confirmed empirically with a minimal repro outside
+// this file too - every member stays visible and the unused branch's field
+// errors as missing). A string-literal `status` discriminant narrows
+// correctly here, so that is the pattern this whole module uses.
+export type SerializeResponse = { status: 'ok'; blob: Blob } | { status: 'error'; error: string };
+
+/** How many frames the chunked fallback maps before yielding to the event
+ * loop (matches the task brief's "every 500 frames"). */
+const FALLBACK_CHUNK_SIZE = 500;
+
+const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** Fallback for when Workers are unavailable or worker construction/dispatch
+ * fails: builds the same v3 envelope as buildEnvelope/buildKinematics (reusing
+ * the same private per-frame mappers, not duplicating them) but maps frames in
+ * chunks of FALLBACK_CHUNK_SIZE, yielding via setTimeout(0) between chunks so
+ * a long take does not block the main thread in one synchronous call. Only
+ * the frame-mapping loop is chunked: serializeV3's JSON.stringify has no yield
+ * points, so the final stringify is still one synchronous call, just over an
+ * already-built (small, compact) envelope object rather than doing the whole
+ * frames->envelope->JSON.stringify pipeline synchronously. */
+export async function serializeV3Chunked(frames: FrameData[], type: TrackingType, kind: SerializeKind, opts: SerializeOpts): Promise<string> {
+    const channels = type === 'FACE' ? (['face'] as const) : (['hands'] as const);
+    const source = { app: 'puppeteer-lab', commit: buildStamp() };
+
+    if (kind === 'kinematics') {
+        const v3Frames: RecordingV3KinematicsFrame[] = new Array(frames.length);
+        for (let i = 0; i < frames.length; i++) {
+            const frame = frames[i];
+            const hands: RecordingV3KinematicsHand[] = mapFrameHands(frame).map((h) => ({ side: h.side, world: h.world }));
+            const face = mapFrameFace(frame);
+            v3Frames[i] = { t: frame.timestamp, hands, face: face ? { blendshapes: face.blendshapes } : null };
+            if ((i + 1) % FALLBACK_CHUNK_SIZE === 0) await yieldToEventLoop();
+        }
+        const envelope: RecordingV3Kinematics = {
+            schema: 'puppeteer-lab/kinematics',
+            version: 3,
+            createdAt: new Date().toISOString(),
+            source,
+            capture: { fps: measureFps(frames.length, opts.durationMs), durationMs: opts.durationMs, frameCount: frames.length },
+            world: WORLD_META,
+            channels: [...channels],
+            frames: v3Frames,
+        };
+        return serializeV3(envelope);
+    }
+
+    const v3Frames: RecordingV3Frame[] = new Array(frames.length);
+    for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        v3Frames[i] = { t: frame.timestamp, hands: mapFrameHands(frame), face: mapFrameFace(frame) };
+        if ((i + 1) % FALLBACK_CHUNK_SIZE === 0) await yieldToEventLoop();
+    }
+    const envelope: RecordingV3 = {
+        schema: 'puppeteer-lab/recording',
+        version: 3,
+        createdAt: new Date().toISOString(),
+        source,
+        capture: { fps: measureFps(frames.length, opts.durationMs), durationMs: opts.durationMs, frameCount: frames.length, video: opts.video },
+        world: WORLD_META,
+        channels: [...channels],
+        frames: v3Frames,
+        audio: opts.audio ?? null,
+    };
+    return serializeV3(envelope);
 }
 
 // --- migrateV2 ---

@@ -6,7 +6,65 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { FrameData, TrackingType } from '../types';
-import { buildEnvelope, buildKinematics, serializeV3, migrateV2, parseDataUrl, toDataUrl, detectTrackingType } from '../components/shared/recordingSchema';
+import {
+    serializeV3Chunked,
+    migrateV2,
+    parseDataUrl,
+    toDataUrl,
+    detectTrackingType,
+    SerializeRequest,
+    SerializeResponse,
+} from '../components/shared/recordingSchema';
+
+/** Runs one export through serialize.worker.ts and resolves with the Blob it
+ * posts back. Constructed lazily (only when exportData actually runs, never
+ * at module scope) so importing this hook never touches `Worker` or
+ * `import.meta.url` in an environment that lacks them (e.g. the vitest
+ * 'node' environment this project's other tests run under). Rejects (instead
+ * of throwing) on missing Worker support, a construction failure, or a
+ * worker-side error/failed load, so callers can uniformly fall back to
+ * serializeV3Chunked with a single try/catch. */
+function runSerializeWorker(request: SerializeRequest): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+        if (typeof Worker === 'undefined') {
+            reject(new Error('Worker is not available in this environment.'));
+            return;
+        }
+
+        let worker: Worker;
+        try {
+            worker = new Worker(new URL('../components/shared/serialize.worker.ts', import.meta.url), { type: 'module' });
+        } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+            return;
+        }
+
+        const settle = (fn: () => void) => {
+            worker.terminate();
+            fn();
+        };
+
+        worker.onmessage = (event: MessageEvent<SerializeResponse>) => {
+            const response = event.data;
+            if (response.status === 'ok') {
+                const blob = response.blob;
+                settle(() => resolve(blob));
+            } else {
+                const error = response.error;
+                settle(() => reject(new Error(error)));
+            }
+        };
+
+        // A module worker that fails to LOAD (e.g. blocked by CSP, missing
+        // chunk) surfaces as an 'error' event on the worker, not a throw from
+        // the constructor above, so this needs its own fallback trigger.
+        worker.onerror = (event) => {
+            settle(() => reject(new Error(event.message || 'serialize.worker.ts failed to load or run.')));
+        };
+
+        worker.postMessage(request);
+    });
+}
 
 /** Last frame index whose timestamp <= t (binary search). 0 when t precedes the first frame. */
 export function findFrameIndex(frames: { timestamp: number }[], t: number): number {
@@ -296,7 +354,13 @@ export const useRecorder = (type: TrackingType) => {
     }, [isPlaying]);
 
     // --- EXPORT / IMPORT ---
-    const exportData = useCallback((format: 'full' | 'kinematics' | 'audio' = 'full') => {
+    // Async since the 'full'/'kinematics' paths now try a Worker first
+    // (TDD-002 P2): callers (RecorderControls.tsx's onClick handlers) already
+    // just call this fire-and-forget, never `await` it, so the returned
+    // promise resolving after the fact is invisible to them - the download
+    // still lands the same way it always has, just not necessarily on the
+    // same tick.
+    const exportData = useCallback(async (format: 'full' | 'kinematics' | 'audio' = 'full') => {
         if (bufferRef.current.length === 0 && format !== 'audio') {
             alert("No recording to export.");
             return;
@@ -333,40 +397,40 @@ export const useRecorder = (type: TrackingType) => {
             return;
         }
 
-        if (format === 'kinematics') {
-            // Raw 3D animation telemetry, v3 shape, no audio (TDD-002 P1).
-            const envelope = buildKinematics(bufferRef.current, type, lastTimestamp());
-            const json = serializeV3(envelope);
+        // 'full' and 'kinematics', v3 shape (TDD-002 P1 shape, P2 dispatch):
+        // try the Worker first so a long take's buildEnvelope/buildKinematics
+        // + JSON.stringify runs off the main thread; fall back to the
+        // chunked main-thread path in recordingSchema.ts if Workers are
+        // unavailable or the worker fails to construct, load, or run.
+        //
+        // Audio plumbing (refs, state) is unchanged from v2: audioBase64Ref
+        // still holds a data URL. parseDataUrl is one cheap string split, so
+        // it stays synchronous here (not moved into the worker); only the
+        // already-parsed { mimeType, base64 } crosses into the worker/
+        // fallback, to be attached to the envelope before the one expensive
+        // serializeV3 call (kinematics exports never carry audio, matching
+        // RecordingV3Kinematics having no audio field).
+        const kind = format; // 'full' | 'kinematics'
+        const audio = kind === 'full' && audioBase64Ref.current ? (parseDataUrl(audioBase64Ref.current) ?? undefined) : undefined;
+        const request: SerializeRequest = { frames: bufferRef.current, type, kind, durationMs: lastTimestamp(), audio };
 
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${type.toLowerCase()}_kinematics_${dateStr}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            return;
+        let blob: Blob;
+        try {
+            blob = await runSerializeWorker(request);
+        } catch (err) {
+            console.warn('Worker export unavailable, falling back to chunked main-thread serialize:', err);
+            const json = await serializeV3Chunked(request.frames, request.type, request.kind, {
+                durationMs: request.durationMs,
+                video: request.video,
+                audio: request.audio,
+            });
+            blob = new Blob([json], { type: 'application/json' });
         }
 
-        // Full session bundle, v3 shape (TDD-002 P1). Audio plumbing (refs,
-        // state) is unchanged from v2: audioBase64Ref still holds a data URL,
-        // just split into { mimeType, base64 } to fill the envelope's own
-        // audio field instead of a bespoke top-level key.
-        const envelope = buildEnvelope(bufferRef.current, type, { durationMs: lastTimestamp() });
-        if (audioBase64Ref.current) {
-            const parsed = parseDataUrl(audioBase64Ref.current);
-            if (parsed) envelope.audio = parsed;
-        }
-        const json = serializeV3(envelope);
-
-        const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${type.toLowerCase()}_recording_${dateStr}.json`;
+        a.download = `${type.toLowerCase()}_${kind === 'kinematics' ? 'kinematics' : 'recording'}_${dateStr}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
