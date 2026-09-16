@@ -326,6 +326,11 @@ const HandTelemetry: React.FC<HandTelemetryProps> = ({ onBack }) => {
             hasData={recorder.hasData}
             frameCount={recorder.frameCount}
             hasAudio={recorder.hasAudio}
+            durationMs={recorder.durationMs}
+            getPlaybackTimeMs={recorder.getPlaybackTimeMs}
+            onScrubStart={recorder.beginScrub}
+            onScrub={recorder.scrubTo}
+            onScrubEnd={recorder.endScrub}
             onRecord={recorder.startRecording}
             onStop={recorder.stopRecording}
             onPlayToggle={recorder.togglePlayback}

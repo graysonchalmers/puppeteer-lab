@@ -7,6 +7,16 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { FrameData, RecordingSession, TrackingType } from '../types';
 
+/** Last frame index whose timestamp <= t (binary search). 0 when t precedes the first frame. */
+export function findFrameIndex(frames: { timestamp: number }[], t: number): number {
+    let lo = 0, hi = frames.length - 1, ans = 0;
+    while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (frames[mid].timestamp <= t) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    return ans;
+}
+
 export const useRecorder = (type: TrackingType) => {
     const [isRecording, setIsRecording] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -20,6 +30,13 @@ export const useRecorder = (type: TrackingType) => {
     const startTimeRef = useRef<number>(0);
     const playbackStartTimeRef = useRef<number>(0);
 
+    // Scrub/pause: isPlaying stays true while paused so consumers keep reading
+    // playback frames; the clock is frozen at pausedAtMsRef.
+    const pausedRef = useRef(false);
+    const pausedAtMsRef = useRef(0);
+    const resumeAfterScrubRef = useRef(false);
+    const [durationMs, setDurationMs] = useState(0);
+
     // Audio recording & playback refs
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioStreamRef = useRef<MediaStream | null>(null);
@@ -28,6 +45,11 @@ export const useRecorder = (type: TrackingType) => {
     const audioBase64Ref = useRef<string | null>(null);
     const audioBlobRef = useRef<Blob | null>(null);
     const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+    const lastTimestamp = () => {
+        const b = bufferRef.current;
+        return b.length ? b[b.length - 1].timestamp : 0;
+    };
 
     // Cleanup audio on unmount
     useEffect(() => {
@@ -49,6 +71,8 @@ export const useRecorder = (type: TrackingType) => {
     const startRecording = useCallback(() => {
         bufferRef.current = [];
         setFrameCount(0);
+        setDurationMs(0);
+        pausedRef.current = false;
         setIsPlaying(false);
         setIsRecording(true);
         startTimeRef.current = performance.now();
@@ -127,6 +151,7 @@ export const useRecorder = (type: TrackingType) => {
     const stopRecording = useCallback(() => {
         setIsRecording(false);
         setFrameCount(bufferRef.current.length);
+        setDurationMs(lastTimestamp());
 
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             try {
@@ -160,66 +185,96 @@ export const useRecorder = (type: TrackingType) => {
     }, [isRecording]);
 
     // --- PLAYBACK ---
+    const prepareAudio = () => {
+        if (!audioUrlRef.current) return null;
+        if (!audioElementRef.current) audioElementRef.current = new Audio();
+        audioElementRef.current.src = audioUrlRef.current;
+        audioElementRef.current.currentTime = 0;
+        return audioElementRef.current;
+    };
+
     const togglePlayback = useCallback(() => {
         if (bufferRef.current.length === 0) return;
-        
+
         if (isPlaying) {
-            setIsPlaying(false);
-            if (audioElementRef.current) {
-                audioElementRef.current.pause();
+            if (pausedRef.current) {
+                // Play pressed while paused after a scrub: resume from there.
+                pausedRef.current = false;
+                playbackStartTimeRef.current = performance.now() - pausedAtMsRef.current;
+                audioElementRef.current?.play().catch(() => {});
+                return;
             }
+            setIsPlaying(false);
+            audioElementRef.current?.pause();
         } else {
             setIsRecording(false);
             setIsPlaying(true);
+            pausedRef.current = false;
             playbackStartTimeRef.current = performance.now();
-
-            if (audioUrlRef.current) {
-                if (!audioElementRef.current) {
-                    audioElementRef.current = new Audio();
-                }
-                audioElementRef.current.src = audioUrlRef.current;
-                audioElementRef.current.currentTime = 0;
-                audioElementRef.current.play().catch(err => {
-                    console.warn("Audio playback interrupted or blocked:", err);
-                });
-            }
+            prepareAudio()?.play().catch(err => {
+                console.warn("Audio playback interrupted or blocked:", err);
+            });
         }
     }, [isPlaying]);
 
-    // Seek playback to specific relative time (ms)
-    const seekPlayback = useCallback((timeMs: number) => {
-        playbackStartTimeRef.current = performance.now() - timeMs;
+    const getPlaybackTimeMs = useCallback((): number => {
+        const d = lastTimestamp();
+        const t = pausedRef.current ? pausedAtMsRef.current : performance.now() - playbackStartTimeRef.current;
+        return Math.max(0, Math.min(d, t));
+    }, []);
+
+    const scrubTo = useCallback((timeMs: number) => {
+        const ms = Math.max(0, Math.min(lastTimestamp(), timeMs));
+        pausedAtMsRef.current = ms;
+        playbackStartTimeRef.current = performance.now() - ms;
         if (audioElementRef.current && audioUrlRef.current) {
-            try {
-                audioElementRef.current.currentTime = Math.max(0, timeMs / 1000);
-            } catch (e) {}
+            try { audioElementRef.current.currentTime = ms / 1000; } catch (e) {}
         }
+    }, []);
+
+    const beginScrub = useCallback(() => {
+        if (bufferRef.current.length === 0) return;
+        resumeAfterScrubRef.current = isPlaying && !pausedRef.current;
+        if (!isPlaying) {
+            // Scrubbing from stopped: enter playback, paused, at the current clock.
+            setIsRecording(false);
+            setIsPlaying(true);
+            playbackStartTimeRef.current = performance.now();
+            prepareAudio();
+        }
+        pausedAtMsRef.current = isPlaying ? getPlaybackTimeMs() : 0;
+        pausedRef.current = true;
+        audioElementRef.current?.pause();
+    }, [isPlaying, getPlaybackTimeMs]);
+
+    const endScrub = useCallback(() => {
+        if (!resumeAfterScrubRef.current) return; // stay paused on the scrubbed frame
+        resumeAfterScrubRef.current = false;
+        pausedRef.current = false;
+        playbackStartTimeRef.current = performance.now() - pausedAtMsRef.current;
+        audioElementRef.current?.play().catch(() => {});
     }, []);
 
     // Helper to get the current frame during playback
     const getPlaybackFrame = useCallback((): FrameData | null => {
-        if (!isPlaying || bufferRef.current.length === 0) return null;
+        const frames = bufferRef.current;
+        if (!isPlaying || frames.length === 0) return null;
 
         const now = performance.now();
-        let playbackTime = now - playbackStartTimeRef.current;
-        
-        const duration = bufferRef.current[bufferRef.current.length - 1].timestamp;
+        let playbackTime = pausedRef.current ? pausedAtMsRef.current : now - playbackStartTimeRef.current;
+        const duration = frames[frames.length - 1].timestamp;
 
-        // Loop
-        if (playbackTime > duration) {
+        // Loop (never while paused; never on a degenerate one-frame take)
+        if (!pausedRef.current && duration > 0 && playbackTime > duration) {
             playbackStartTimeRef.current = now;
             playbackTime = 0;
-
             if (audioElementRef.current && audioUrlRef.current) {
                 audioElementRef.current.currentTime = 0;
                 audioElementRef.current.play().catch(() => {});
             }
         }
 
-        // Find frame
-        const frame = bufferRef.current.find(f => f.timestamp >= playbackTime);
-        return frame || bufferRef.current[bufferRef.current.length - 1];
-
+        return frames[findFrameIndex(frames, playbackTime)];
     }, [isPlaying]);
 
     // --- EXPORT / IMPORT ---
@@ -334,6 +389,7 @@ export const useRecorder = (type: TrackingType) => {
 
                 bufferRef.current = json.frames;
                 setFrameCount(json.frames.length);
+                setDurationMs(lastTimestamp());
                 setIsPlaying(false);
                 setIsRecording(false);
 
@@ -370,11 +426,15 @@ export const useRecorder = (type: TrackingType) => {
         isPlaying,
         frameCount,
         hasAudio,
+        durationMs,
         startRecording,
         stopRecording,
         captureFrame,
         togglePlayback,
-        seekPlayback,
+        getPlaybackTimeMs,
+        beginScrub,
+        scrubTo,
+        endScrub,
         getPlaybackFrame,
         exportData,
         loadData,

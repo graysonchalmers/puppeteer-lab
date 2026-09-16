@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Circle, Square, Play, Pause, Download, Upload, ChevronDown, Music, Activity, FileJson } from 'lucide-react';
 
 interface RecorderControlsProps {
@@ -13,12 +13,33 @@ interface RecorderControlsProps {
     hasData: boolean;
     frameCount: number;
     hasAudio?: boolean;
+    durationMs: number;
+    getPlaybackTimeMs: () => number;
     onRecord: () => void;
     onStop: () => void;
     onPlayToggle: () => void;
+    onScrubStart: () => void;
+    onScrub: (ms: number) => void;
+    onScrubEnd: () => void;
     onExport: (format?: 'full' | 'kinematics' | 'audio') => void;
     onImport: (file: File) => void;
 }
+
+const fmt = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.${Math.floor((ms % 1000) / 100)}`;
+};
+
+/** Samples the playback clock at 10 Hz so the render loop never calls setState. */
+const PlaybackClock: React.FC<{ getTimeMs: () => number; durationMs: number; active: boolean }> = ({ getTimeMs, durationMs, active }) => {
+    const [t, setT] = useState(0);
+    useEffect(() => {
+        if (!active) { setT(0); return; }
+        const id = setInterval(() => setT(getTimeMs()), 100);
+        return () => clearInterval(id);
+    }, [active, getTimeMs]);
+    return <span className="tabular-nums">{fmt(t)} / {fmt(durationMs)}</span>;
+};
 
 const RecorderControls: React.FC<RecorderControlsProps> = ({
     isRecording,
@@ -26,9 +47,14 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     hasData,
     frameCount,
     hasAudio,
+    durationMs,
+    getPlaybackTimeMs,
     onRecord,
     onStop,
     onPlayToggle,
+    onScrubStart,
+    onScrub,
+    onScrubEnd,
     onExport,
     onImport
 }) => {
@@ -92,6 +118,25 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 >
                     {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} className="ml-0.5" />}
                 </button>
+            </div>
+
+            {/* Scrubber */}
+            <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
+                <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1, durationMs)}
+                    step={16}
+                    defaultValue={0}
+                    disabled={!hasData || isRecording}
+                    onPointerDown={onScrubStart}
+                    onChange={(e) => onScrub(parseFloat(e.target.value))}
+                    onPointerUp={onScrubEnd}
+                    onPointerCancel={onScrubEnd}
+                    className="flex-1 h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] disabled:opacity-30"
+                    title="Scrub"
+                />
+                <PlaybackClock getTimeMs={getPlaybackTimeMs} durationMs={durationMs} active={isPlaying} />
             </div>
 
             {/* File Operations */}
