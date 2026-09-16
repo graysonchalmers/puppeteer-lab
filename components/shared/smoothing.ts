@@ -24,3 +24,24 @@ export const SMOOTHING_PRESETS = [
 export function smoothingToLerp(amount: number): number {
   return 1.0 - amount * 0.9;
 }
+
+export interface LandmarkLike { x: number; y: number; z: number }
+
+/**
+ * Per-landmark lerp from prev toward next. alpha is the per-frame LERP factor
+ * (1.0 = raw passthrough, 0.1 = heavy). Returns next untouched when there is
+ * nothing to blend against, so the first frame and hand re-entry never swoop.
+ */
+export function smoothLandmarks(
+  prev: LandmarkLike[] | null,
+  next: LandmarkLike[],
+  alpha: number
+): LandmarkLike[] {
+  if (!prev || prev.length !== next.length || alpha >= 1) return next;
+  const a = Math.max(0.01, alpha);
+  return next.map((n, i) => ({
+    x: prev[i].x + (n.x - prev[i].x) * a,
+    y: prev[i].y + (n.y - prev[i].y) * a,
+    z: prev[i].z + (n.z - prev[i].z) * a,
+  }));
+}

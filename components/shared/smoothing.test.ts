@@ -28,3 +28,30 @@ describe('SMOOTHING_PRESETS', () => {
     }
   });
 });
+
+import { smoothLandmarks } from './smoothing';
+
+describe('smoothLandmarks', () => {
+  const prev = [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }];
+  const next = [{ x: 10, y: 10, z: 10 }, { x: 2, y: 2, z: 2 }];
+
+  it('alpha 1 returns next unchanged (RAW passthrough)', () => {
+    expect(smoothLandmarks(prev, next, 1.0)).toEqual(next);
+  });
+
+  it('alpha 0.1 moves 10% toward next', () => {
+    const out = smoothLandmarks(prev, next, 0.1);
+    expect(out[0].x).toBeCloseTo(1);
+    expect(out[0].y).toBeCloseTo(1);
+    expect(out[0].z).toBeCloseTo(1);
+    expect(out[1].x).toBeCloseTo(1.1);
+  });
+
+  it('null prev returns next (first frame)', () => {
+    expect(smoothLandmarks(null, next, 0.1)).toEqual(next);
+  });
+
+  it('length mismatch returns next', () => {
+    expect(smoothLandmarks([{ x: 0, y: 0, z: 0 }], next, 0.1)).toEqual(next);
+  });
+});

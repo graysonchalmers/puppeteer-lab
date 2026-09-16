@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HandLandmarker, FilesetResolver, HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import * as THREE from 'three';
+import { smoothLandmarks, LandmarkLike } from '../components/shared/smoothing';
 
 // Mapping 2D normalized coordinates to 3D game world.
 export const mapHandToWorld = (x: number, y: number, z: number = 0): THREE.Vector3 => {
@@ -66,6 +67,10 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
 
   // To expose raw results for UI preview
   const lastResultsRef = useRef<HandLandmarkerResult | null>(null);
+
+  // Previous frame's smoothed landmarks per side, so smoothing pairs by
+  // handedness rather than array index (MediaPipe reorders hands between frames).
+  const prevSmoothedRef = useRef<{ Left: LandmarkLike[] | null; Right: LandmarkLike[] | null }>({ Left: null, Right: null });
 
   const landmarkerRef = useRef<HandLandmarker | null>(null);
   const requestRef = useRef<number>(0);
@@ -131,6 +136,24 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
       }
     };
 
+    const smoothResults = (results: HandLandmarkerResult): HandLandmarkerResult => {
+        const alpha = settingsRef.current.smoothingFactor;
+        const prev = prevSmoothedRef.current;
+        const seen = { Left: false, Right: false };
+        const landmarks = (results.landmarks ?? []).map((lms, i) => {
+            const side: 'Left' | 'Right' =
+                results.handedness?.[i]?.[0]?.categoryName === 'Right' ? 'Right' : 'Left';
+            const out = smoothLandmarks(prev[side], lms, alpha);
+            prev[side] = out;
+            seen[side] = true;
+            return out;
+        });
+        if (!seen.Left) prev.Left = null;
+        if (!seen.Right) prev.Right = null;
+        // Rebuild rather than mutate: MediaPipe may reuse the result object.
+        return { ...results, landmarks: landmarks as HandLandmarkerResult['landmarks'] };
+    };
+
     const predictWebcam = () => {
         if (!videoRef.current || !landmarkerRef.current || !isActive) return;
 
@@ -139,9 +162,9 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         if (video.videoWidth > 0 && video.videoHeight > 0) {
              let startTimeMs = performance.now();
              try {
-                 const results = landmarkerRef.current.detectForVideo(video, startTimeMs);
-                 lastResultsRef.current = results;
-                 processResults(results);
+                 const smoothed = smoothResults(landmarkerRef.current.detectForVideo(video, startTimeMs));
+                 lastResultsRef.current = smoothed;
+                 processResults(smoothed);
              } catch (e) {
                  // Sometimes detectForVideo fails if timestamps aren't strictly increasing or video is not ready
                  console.warn("Detection failed this frame", e);
@@ -189,15 +212,11 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
 
         // --- Update State with Smoothing & Velocity ---
         const s = handPositionsRef.current;
-        
-        // Use dynamic smoothing factor from ref
-        const LERP = settingsRef.current.smoothingFactor;
 
         // Left
         if (newLeft) {
             if (s.left) {
-                newLeft.lerpVectors(s.left, newLeft, LERP);
-                if (deltaTime > 0.001) { 
+                if (deltaTime > 0.001) {
                      s.leftVelocity.subVectors(newLeft, s.left).divideScalar(deltaTime);
                 }
             }
@@ -210,7 +229,6 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
         // Right
         if (newRight) {
              if (s.right) {
-                 newRight.lerpVectors(s.right, newRight, LERP);
                  if (deltaTime > 0.001) {
                       s.rightVelocity.subVectors(newRight, s.right).divideScalar(deltaTime);
                  }
