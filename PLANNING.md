@@ -47,6 +47,7 @@ What must be true before the tour is shown to friends. Each line maps to an item
 - **`tsconfig` strict.** Scope it after item 5 removes most of the `any`s; a big lift before that.
 - **Split the 682 KB vendor chunk.** Already lazy-loaded; low priority.
 - **A hands + face puppet demo.** Replaces a tour stop; the tour does not grow to six.
+- **Generated motion as input** (idea 2026-09-15): try kimodo.cpp (text-to-motion) and motion-bricks.cpp (keyframe synthesis) from github.com/localai-org as a second source of frames alongside live capture. Needs TDD-002's schema first so generated clips and recorded takes share one format. Not now.
 
 ## ⏱️ If a demo date is close
 

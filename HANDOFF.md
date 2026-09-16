@@ -1,38 +1,45 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-06 ~03:40 ET_
+_Last updated: 2026-09-16 ~05:30 ET_
 
 ## 🎯 Current state
-Public GitHub repo, `main` level with `origin/main` at `22e77bf` **plus an uncommitted documentation set from this session** (see Changed). Code is unchanged since 2026-09-04: hub of 5 demos, shared engine for 2 of them, CI green (typecheck, 22 tests, build, smoke). This session ran the second teardown against a goal Grayson stated for the first time (a **demo for game-dev friends and a test bed**: track hands with a webcam, drive objects, save it out) and wrote the documentation layer that was missing: `NORTH_STAR.md`, `PLANNING.md` rewritten as the gated roadmap, `docs/adr/0001`, four TDDs, the teardown report, a README reframe, and a fix to the stale Motion Recorder doc.
-
-Teardown verdict: core is sound, keep nearly everything. Three demo-visible defects found with evidence: the Global Smoothing slider does nothing in Air Canvas (it is wired to a ref that demo never reads), the hub promises a timeline scrubber that has no UI, and the old docs described a product rather than the goal. Full report: `docs/TEARDOWN-2026-09-06.md`.
+Public GitHub repo, `main`. Roadmap **Now items 1, 2, 3 are code-complete and gate-green** (typecheck, 31 tests, build, smoke), plus the portfolio build stamp: landmark-level smoothing (the Global Smoothing slider now acts on what every demo draws), a recorder scrubber with pause/seek/resume and a Stop-to-live button in all three recorder demos, MediaPipe WASM + models vendored under `public/mediapipe/` so tracking starts offline (WASM regenerated on `postinstall`, gitignored; the two `.task` models committed, ~11.5 MB), and a commit-derived build stamp in the hub footer. Docs from 2026-09-06 (North Star, roadmap, ADR-0001, four TDDs, teardown #2) are committed. Executed Subagent-Driven from `docs/superpowers/plans/2026-09-16-now-items-1-3.md` after an adversarial grill of the three TDD phases (grill catches: smoothing anchor is `predictWebcam`, old fingertip lerps would double-smooth, "pause" needed a ref not `isPlaying=false`, `vite/client` types needed for `import.meta.env`).
 
 ## 📌 Where we stopped
-Docs written, gates re-run green on the unchanged code, working tree **not committed** (Grayson had not asked for a commit). Commons log written. Nothing else in flight.
+All commits on `main` and pushed; CI should be green (check). Ledger/workspace deleted. **Nothing hand-driven has been camera-verified**: the preview browser has no camera/WebGL, so items 1 to 3 are proven by gates and mount only.
 
 ## ▶️ Next concrete step
-1. Review and commit this session's docs (`git add -A; git commit; git push`, direct to `main` as usual).
-2. Then roadmap item 1: **landmark-level smoothing** in `hooks/useMediaPipe.ts` (TDD-001 phase 1, S). Lerp each of the 21 landmarks against the previous frame's same-side landmarks using the slider's factor before publishing `lastResultsRef`; add `smoothLandmarks.test.ts` pinning the endpoints. Host-verify in real Chrome: Air Canvas `RAW` vs `MAX` visibly differ. Closes teardown F1.
-
-Alternatives (from `PLANNING.md`): item 2 scrubber (S, closes F2, `seekPlayback` already exists) or item 3 vendor MediaPipe assets (S, do this first if a demo date is inside two weeks).
+**Host verification in real Chrome** (`npm run dev`, allow camera + mic), then tick the demo-day bar in `PLANNING.md`:
+1. Air Canvas: set Line Reliability to RAW first, then compare Global Smoothing RAW vs MAX while drawing a slow circle. Expect visible jitter difference. Note pinch-release lag at MAX (TDD-001 Option A vs B call).
+2. Hand Telemetry: skeleton and sidebar numbers both calm at SMTH.
+3. Motion Recorder: record a take with voice, Play, drag the scrubber (audio should follow within ~50 ms by ear), release (resumes), click Stop (live view, Record enabled). Also scrub from stopped, then Play (resumes from scrubbed time). Export Audio + Kinematics still produce data (unverified since 2026-09-04).
+4. Offline: `npm run build; npm run preview`, disable the network adapter (not DevTools Offline, which also blocks the lazy chunks), hard reload, open all five demos.
+5. Footer shows the build stamp (`npm run stamp` prints the same one).
+Then roadmap item 4 (housekeeping batch: LICENSE, kill `types.ts` JSX augmentation, stale `lineReliability.ts` comment, hub "Games" title, throttle readouts) is the next S.
 
 ## ❓ Open questions
-- Commit these docs as one commit or split (docs vs README)? Suggest one: "Docs: North Star, roadmap, ADR-0001, TDD-001..004, teardown #2".
-- TDD-001 pinch gating: smoothed landmarks (default, Option A) or raw for onset (Option B)? Decide on camera after item 1 lands.
-- TDD-004: commit the ~12 MB of `.task` models or gitignore + `postinstall`? TDD proposes commit; ADR-0001 accepts the size.
-- Still unverified on a real webcam from 2026-09-04: Line Reliability reconnect behaviour and the two export buttons. Fold into the item 1 host check.
+- TDD-001 pinch gating: smoothed landmarks (Option A, current) or raw for onset (B)? Decide on camera (step 1 above). Convergence at MAX is ~360 ms at 60 Hz, not the ~100 ms the TDD guessed.
+- Exported recordings now carry landmarks smoothed at whatever the slider was during capture (documented in `useRecorder.ts`). Fine for a test bed; say so in TDD-002's schema (`capture.smoothing` field) when it lands.
+- Parked from final review (see log): two hands mislabelled the same side smooth against each other for a frame (fix in TDD-001 P2 `buildFrame`); keyboard scrubbing does not pause and `step=16` is coarse (TDD-003 P4); CDN URL pin `0.10.9` vs npm pin could drift (CDN mode is opt-in); scrub state machine has no automated tests (needs `@testing-library/react`).
+- `v0.0.0` prefix in the stamp comes from `package.json` version; bump or drop the field if it bothers.
 
 ## 🗂️ Changed this session
-- Branch: `main` · 0 commits · working tree has 9 new/modified files, uncommitted.
-- New: `NORTH_STAR.md`, `docs/TEARDOWN-2026-09-06.md`, `docs/adr/0001-demo-first-test-bed.md`, `docs/tdd/TDD-001-tracker-core.md`, `docs/tdd/TDD-002-recording-schema-and-export.md`, `docs/tdd/TDD-003-motion-recorder-upgrade.md`, `docs/tdd/TDD-004-offline-first-assets.md`.
-- Rewritten: `PLANNING.md` (product pitch replaced by the ordered roadmap and demo-day bar), `demos/motion-recorder/README.md` (stale "to be created" claims removed).
-- Edited: `README.md` (test-bed framing, five demos, Start here, Getting started, How to verify; Technical Guide untouched), `HANDOFF.md`.
-- No code changed. One experiment: removed the `types.ts` JSX `any` augmentation, ran `tsc --noEmit` (exit 0), restored the file; recorded as teardown F12 (Kill).
-- Decisions (+ why): North Star is "demo-first test bed" (ADR-0001) because Grayson stated it and the product framing had steered two sessions toward diagnostic polish over the recorder. Per-demo `PLANNING.md` files demoted to idea backlogs rather than deleted (additive, Grayson's call to prune). Teardown report committed into `docs/` this time (the 2026-09-04 one lived only in a scratchpad and was lost to the next session) because it is the evidence base for the TDDs. Docs left uncommitted because no commit was requested.
+- Branch: `main` · commits `d0abbed` (docs), `a69d3cd` (smoothing), `21f319a` (scrubber), `8c863b1` + `2a38fcf` (vendor assets + atomic download), `68627b9` (build stamp), `121eacc` (final-review fix wave: `isPaused` + `stopPlayback`, CDN flag parse, git-less stamp fallback, `stamp` script), plus this handoff/plan commit.
+- New: `hooks/useRecorder.test.ts`, `hooks/mediapipeAssets.ts`, `scripts/vendor-assets.mjs`, `scripts/build-stamp.mjs` + `scripts/build-stamp/` (verbatim from Tool-3dViewer, plus a git-less fallback), `vite-env.d.ts`, `public/mediapipe/models/*.task`, `docs/superpowers/plans/2026-09-16-now-items-1-3.md`.
+- Modified: `hooks/useMediaPipe.ts`, `hooks/useFaceTracker.ts`, `hooks/useRecorder.ts`, `components/shared/smoothing.ts` + test, `components/RecorderControls.tsx`, `components/MotionRecorder.tsx`, `components/telemetry/HandTelemetry.tsx`, `components/FaceDemo.tsx`, `components/DemoHub.tsx` (footer stamp), `vite.config.ts`, `package.json` (`postinstall`, `build`, `stamp`), `.gitignore`, `scripts/smoke.mjs` (vendored-asset + stamp probes), `PLANNING.md` (kimodo/motion-bricks idea under Later).
+- Decisions (+ why): pause is a ref with `isPlaying` kept true so consumers keep showing playback frames while scrubbing (otherwise the sphere jumps to the live hand under the thumb); a Stop button is the one-click exit from paused playback (final review found scrub-from-stopped stranded the Record button); models committed, WASM not (18 MB regenerable vs 11.5 MB that a clone needs offline); build stamp adopted per the 2026-09-14 portfolio SOP since the build was touched.
 
 ---
 
 ## 🕓 Session log
+### 2026-09-16 (early) - Grill, plan, and ship roadmap items 1-3 + build stamp (Subagent-Driven)
+- Grayson replied "1 + 2 + 3 + 4" to the 2026-09-06 menu: commit docs, then smoothing, vendor assets, scrubber, and grill the TDDs. Committed docs `d0abbed`, pushed.
+- Grill (subagent, read-only, against real code): all three phases GO-WITH-CHANGES. Catches folded into the plan: smoothing must live in `predictWebcam` (where `lastResultsRef` is assigned) and the two `lerpVectors` in `processResults` must go or alpha compounds; absent side resets `prev`; rebuild the result object; "pause" cannot be `isPlaying=false` (consumers switch to live feed), so a `pausedRef`; scrub-from-stopped must enter paused playback; `duration<=0` loop spam guard; `import.meta.env` needs `vite/client` types; WASM is 4 files/18 MB (gitignore, regenerate), models ~11.5 MB (commit); offline gate must use `vite preview` + adapter off since DevTools Offline blocks lazy chunks.
+- Plan `docs/superpowers/plans/2026-09-16-now-items-1-3.md` (4 tasks). Subagent-Driven: fresh implementer + reviewer per task; Task 3 had one fix round (atomic model download + content-length check); final whole-branch review (Opus) found one must-fix (scrub-from-stopped left `isPlaying+paused` with Record disabled and no exit) fixed in `121eacc` with `isPaused` state + `stopPlayback` + Stop button; four lows fixed in the same wave; four parked with rulings (above).
+- Gates green at HEAD: typecheck, 31 tests, build, smoke (now also asserts the six vendored files and the stamp in a JS asset). Dev-server network check: all `/mediapipe/...` requests from localhost 200, zero CDN requests.
+- Commons log: `_agent-commons\log\2026-09-16-claude-code-puppeteer-lab-now-items-1-3-shipped.md`. Idea file: kimodo/motion-bricks note recorded under Later (resolution line appended).
+
+### 2026-09-06 (early) - Teardown #2 against the stated goal, North Star, roadmap, four TDDs (docs committed 2026-09-16 as `d0abbed`)
 ### 2026-09-06 (early) - Teardown #2 against the stated goal, North Star, roadmap, four TDDs
 - `/pickup` (baton = HANDOFF.md, git clean, level with origin, gates green) then `/teardown`. Grayson's framing this session: a demo for game-dev friends ("you can run motion capture on your hands and use that to control other objects, or save that out") and a test bed; asked for next steps, TDDs, and North Star docs.
 - Read every source file (about 6,000 lines across 32 files), all docs, both prior commons logs, the split spec. Verified claims rather than trusting them: `grep seekPlayback` (no caller), `git ls-files` (no LICENSE), tsc without the JSX augmentation (passes), dist chunk sizes, runtime CDN URLs.
