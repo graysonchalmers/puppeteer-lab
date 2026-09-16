@@ -5,7 +5,8 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { FrameData, RecordingSession, TrackingType } from '../types';
+import { FrameData, TrackingType } from '../types';
+import { buildEnvelope, buildKinematics, serializeV3, migrateV2, parseDataUrl, toDataUrl, detectTrackingType } from '../components/shared/recordingSchema';
 
 /** Last frame index whose timestamp <= t (binary search). 0 when t precedes the first frame. */
 export function findFrameIndex(frames: { timestamp: number }[], t: number): number {
@@ -333,27 +334,11 @@ export const useRecorder = (type: TrackingType) => {
         }
 
         if (format === 'kinematics') {
-            // Export raw 3D animation telemetry without base64 audio
-            const kinematicsSession = {
-                version: "2.0-kinematics",
-                type: type,
-                date: new Date().toISOString(),
-                fps: 60,
-                frameCount: bufferRef.current.length,
-                durationSeconds: bufferRef.current.length > 0 ? bufferRef.current[bufferRef.current.length - 1].timestamp / 1000 : 0,
-                frames: bufferRef.current.map(f => ({
-                    timestampMs: f.timestamp,
-                    // World-space 3D hand coordinates (the primary mocap output from Motion Recorder)
-                    leftHand: f.leftHand,
-                    rightHand: f.rightHand,
-                    // Raw MediaPipe hand landmarks (captured by the Air Canvas / Data Visualizer view)
-                    handLandmarks: f.landmarks,
-                    faceLandmarks: f.faceLandmarks,
-                    blendshapes: f.blendshapes
-                }))
-            };
+            // Raw 3D animation telemetry, v3 shape, no audio (TDD-002 P1).
+            const envelope = buildKinematics(bufferRef.current, type, lastTimestamp());
+            const json = serializeV3(envelope);
 
-            const blob = new Blob([JSON.stringify(kinematicsSession, null, 2)], { type: 'application/json' });
+            const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -365,20 +350,20 @@ export const useRecorder = (type: TrackingType) => {
             return;
         }
 
-        // Full Session bundle
-        const session: RecordingSession = {
-            version: "2.0",
-            type: type,
-            date: new Date().toISOString(),
-            duration: bufferRef.current.length > 0 ? bufferRef.current[bufferRef.current.length - 1].timestamp / 1000 : 0,
-            frames: bufferRef.current,
-            hasAudio: Boolean(audioUrlRef.current),
-            audioBase64: audioBase64Ref.current || undefined
-        };
+        // Full session bundle, v3 shape (TDD-002 P1). Audio plumbing (refs,
+        // state) is unchanged from v2: audioBase64Ref still holds a data URL,
+        // just split into { mimeType, base64 } to fill the envelope's own
+        // audio field instead of a bespoke top-level key.
+        const envelope = buildEnvelope(bufferRef.current, type, { durationMs: lastTimestamp() });
+        if (audioBase64Ref.current) {
+            const parsed = parseDataUrl(audioBase64Ref.current);
+            if (parsed) envelope.audio = parsed;
+        }
+        const json = serializeV3(envelope);
 
-        const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+        const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement('a');
         a.href = url;
         a.download = `${type.toLowerCase()}_recording_${dateStr}.json`;
@@ -392,43 +377,67 @@ export const useRecorder = (type: TrackingType) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const json = JSON.parse(e.target?.result as string) as RecordingSession;
-                
-                // Basic validation
-                if (!json.frames || !Array.isArray(json.frames)) {
+                const json: unknown = JSON.parse(e.target?.result as string);
+
+                // Basic validation, before migrateV2 so a malformed file still
+                // gets a clear message instead of silently loading 0 frames.
+                if (!json || typeof json !== 'object' || !Array.isArray((json as any).frames)) {
                     throw new Error("Invalid file format: missing frames");
                 }
 
-                if (json.type !== type) {
-                    const confirm = window.confirm(`This file is type "${json.type}" but you are in "${type}" mode. Load anyway?`);
+                const fileType = detectTrackingType(json);
+                if (fileType && fileType !== type) {
+                    const confirm = window.confirm(`This file is type "${fileType}" but you are in "${type}" mode. Load anyway?`);
                     if (!confirm) return;
                 }
 
-                bufferRef.current = json.frames;
-                setFrameCount(json.frames.length);
+                // Runs v2 ("2.0" / "2.0-kinematics"), v3 ("puppeteer-lab/recording"),
+                // and any already-FrameData[] shape through one code path.
+                const frames = migrateV2(json);
+
+                bufferRef.current = frames;
+                setFrameCount(frames.length);
                 setDurationMs(lastTimestamp());
                 setIsPlaying(false);
                 setIsRecording(false);
 
-                // Load synchronized audio if present.
+                // Load synchronized audio if present. v3 files carry it as
+                // audio: { mimeType, base64 }; v2 files carry a top-level
+                // audioBase64 data URL directly.
+                const v3Audio = (json as any).audio as { mimeType: string; base64: string } | null | undefined;
+                const audioDataUrl = v3Audio ? toDataUrl(v3Audio.mimeType, v3Audio.base64) : (json as any).audioBase64;
+
                 // A loaded session has no live Blob, so clear audioBlobRef and let
                 // audio export fall through to the base64 decode path.
                 audioBlobRef.current = null;
-                if (json.audioBase64) {
-                    audioBase64Ref.current = json.audioBase64;
-                    audioUrlRef.current = json.audioBase64;
+                if (audioDataUrl) {
+                    audioBase64Ref.current = audioDataUrl;
                     setHasAudio(true);
-                    if (!audioElementRef.current) {
-                        audioElementRef.current = new Audio();
-                    }
-                    audioElementRef.current.src = json.audioBase64;
+                    // Convert the data URL to a blob URL (TDD-002 risk fix):
+                    // seeking on a data URL is slower than on a blob URL in
+                    // some browsers, and the unmount cleanup already only
+                    // revokes URLs that start with 'blob:'.
+                    fetch(audioDataUrl)
+                        .then((r) => r.blob())
+                        .then((blob) => {
+                            if (audioUrlRef.current && audioUrlRef.current.startsWith('blob:')) {
+                                URL.revokeObjectURL(audioUrlRef.current);
+                            }
+                            const blobUrl = URL.createObjectURL(blob);
+                            audioUrlRef.current = blobUrl;
+                            if (!audioElementRef.current) {
+                                audioElementRef.current = new Audio();
+                            }
+                            audioElementRef.current.src = blobUrl;
+                        })
+                        .catch((err) => console.warn("Failed to convert loaded audio to a blob URL:", err));
                 } else {
                     setHasAudio(false);
                     audioUrlRef.current = null;
                     audioBase64Ref.current = null;
                 }
 
-                alert(`Loaded ${json.frames.length} frames.${json.audioBase64 ? ' (With synchronized audio)' : ''}`);
+                alert(`Loaded ${frames.length} frames.${audioDataUrl ? ' (With synchronized audio)' : ''}`);
 
             } catch (err) {
                 console.error(err);
