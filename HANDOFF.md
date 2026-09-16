@@ -1,9 +1,9 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-16 ~05:30 ET_
+_Last updated: 2026-09-16 ~06:30 ET_
 
 ## 🎯 Current state
-Public GitHub repo, `main`. Roadmap **Now items 1, 2, 3 are code-complete and gate-green** (typecheck, 31 tests, build, smoke), plus the portfolio build stamp: landmark-level smoothing (the Global Smoothing slider now acts on what every demo draws), a recorder scrubber with pause/seek/resume and a Stop-to-live button in all three recorder demos, MediaPipe WASM + models vendored under `public/mediapipe/` so tracking starts offline (WASM regenerated on `postinstall`, gitignored; the two `.task` models committed, ~11.5 MB), and a commit-derived build stamp in the hub footer. Docs from 2026-09-06 (North Star, roadmap, ADR-0001, four TDDs, teardown #2) are committed. Executed Subagent-Driven from `docs/superpowers/plans/2026-09-16-now-items-1-3.md` after an adversarial grill of the three TDD phases (grill catches: smoothing anchor is `predictWebcam`, old fingertip lerps would double-smooth, "pause" needed a ref not `isPlaying=false`, `vite/client` types needed for `import.meta.env`).
+Public GitHub repo, `main`. Roadmap **Now items 1 through 4 are code-complete and gate-green** (item 4 housekeeping landed in `bcbde1d`: `LICENSE` Apache-2.0, `types.ts` JSX `any` augmentation deleted, stale `lineReliability.ts` comment fixed, hub card "Games" is now "Tempo Strike", `HandTelemetry`/`FaceDemo` sidebar readouts throttled to 10 Hz). Roadmap Now is empty; Next starts with item 5 (`TrackedFrame` + `useTracker`, M, `phased-rebuild`). Earlier the same day: items 1, 2, 3 were code-complete and gate-green (typecheck, 31 tests, build, smoke), plus the portfolio build stamp: landmark-level smoothing (the Global Smoothing slider now acts on what every demo draws), a recorder scrubber with pause/seek/resume and a Stop-to-live button in all three recorder demos, MediaPipe WASM + models vendored under `public/mediapipe/` so tracking starts offline (WASM regenerated on `postinstall`, gitignored; the two `.task` models committed, ~11.5 MB), and a commit-derived build stamp in the hub footer. Docs from 2026-09-06 (North Star, roadmap, ADR-0001, four TDDs, teardown #2) are committed. Executed Subagent-Driven from `docs/superpowers/plans/2026-09-16-now-items-1-3.md` after an adversarial grill of the three TDD phases (grill catches: smoothing anchor is `predictWebcam`, old fingertip lerps would double-smooth, "pause" needed a ref not `isPlaying=false`, `vite/client` types needed for `import.meta.env`).
 
 ## 📌 Where we stopped
 All commits on `main` and pushed; CI should be green (check). Ledger/workspace deleted. **Nothing hand-driven has been camera-verified**: the preview browser has no camera/WebGL, so items 1 to 3 are proven by gates and mount only.
@@ -15,7 +15,8 @@ All commits on `main` and pushed; CI should be green (check). Ledger/workspace d
 3. Motion Recorder: record a take with voice, Play, drag the scrubber (audio should follow within ~50 ms by ear), release (resumes), click Stop (live view, Record enabled). Also scrub from stopped, then Play (resumes from scrubbed time). Export Audio + Kinematics still produce data (unverified since 2026-09-04).
 4. Offline: `npm run build; npm run preview`, disable the network adapter (not DevTools Offline, which also blocks the lazy chunks), hard reload, open all five demos.
 5. Footer shows the build stamp (`npm run stamp` prints the same one).
-Then roadmap item 4 (housekeeping batch: LICENSE, kill `types.ts` JSX augmentation, stale `lineReliability.ts` comment, hub "Games" title, throttle readouts) is the next S.
+6. Hand Telemetry / Face Puppet sidebars still update (at 10 Hz now); React Profiler shows sidebar commits at or under 10 per second.
+Then roadmap item 5 (`TrackedFrame` + `useTracker`, TDD-001 P2 to P4, M) via `phased-rebuild`; or item 6 (schema v3 + Blender importer) if the Blender demo matters more than the refactor.
 
 ## ❓ Open questions
 - TDD-001 pinch gating: smoothed landmarks (Option A, current) or raw for onset (B)? Decide on camera (step 1 above). Convergence at MAX is ~360 ms at 60 Hz, not the ~100 ms the TDD guessed.
@@ -32,6 +33,10 @@ Then roadmap item 4 (housekeeping batch: LICENSE, kill `types.ts` JSX augmentati
 ---
 
 ## 🕓 Session log
+### 2026-09-16 (cont.) - Roadmap item 4 housekeeping batch
+- Grayson: "run item 4, the housekeeping batch + wrap and push". One implementer subagent from an inline brief, diff reviewed directly by the controller (6 files, mechanical). Commit `bcbde1d`: `LICENSE` (Apache-2.0, matches the SPDX headers), `types.ts` JSX `any` block + unused React import removed (tsc still clean, so R3F's own types were always enough), `lineReliability.ts` header now points at `AirCanvas.tsx drawFrame`, hub Tempo Strike card titled and labelled by name, `setMetrics`/`setBlendshapes` gated to 100 ms. Gates green (typecheck, 31 tests, build, smoke). CI on the previous push was green.
+- Wrap-up: this handoff, `PLANNING.md` (item 4 to Done, LICENSE ticked on the demo-day bar), commons log `_agent-commons\log\2026-09-16-claude-code-puppeteer-lab-item4-housekeeping.md`, pushed.
+
 ### 2026-09-16 (early) - Grill, plan, and ship roadmap items 1-3 + build stamp (Subagent-Driven)
 - Grayson replied "1 + 2 + 3 + 4" to the 2026-09-06 menu: commit docs, then smoothing, vendor assets, scrubber, and grill the TDDs. Committed docs `d0abbed`, pushed.
 - Grill (subagent, read-only, against real code): all three phases GO-WITH-CHANGES. Catches folded into the plan: smoothing must live in `predictWebcam` (where `lastResultsRef` is assigned) and the two `lerpVectors` in `processResults` must go or alpha compounds; absent side resets `prev`; rebuild the result object; "pause" cannot be `isPlaying=false` (consumers switch to live feed), so a `pausedRef`; scrub-from-stopped must enter paused playback; `duration<=0` loop spam guard; `import.meta.env` needs `vite/client` types; WASM is 4 files/18 MB (gitignore, regenerate), models ~11.5 MB (commit); offline gate must use `vite preview` + adapter off since DevTools Offline blocks lazy chunks.
