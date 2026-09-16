@@ -1,30 +1,46 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-04 ~23:55 ET_
+_Last updated: 2026-09-06 ~03:40 ET_
 
 ## 🎯 Current state
-Live as a PUBLIC GitHub repo, in sync with `origin/main` at `8c6f889`. Zero-hardware webcam tracking + recording framework (React 18 + R3F + Three 0.167 + `@mediapipe/tasks-vision`), hub of **5 demos** on the shared engine in `components/shared` (`resolveHands` + `useHandRenderLoop`). This session added a quality layer on top of the DebugView split: **CI is live and green** (typecheck -> tests -> build -> smoke on every push/PR), the Global Smoothing panel is one shared component, the last TypeScript error is gone (`tsc --noEmit` clean and gated in CI), a real `resolveHands` bug is fixed, README matches the code, and the demos are code-split so the initial bundle dropped from ~1.27MB to ~163KB. `npm test` = 22 green. Working tree clean, all pushed.
+Public GitHub repo, `main` level with `origin/main` at `22e77bf` **plus an uncommitted documentation set from this session** (see Changed). Code is unchanged since 2026-09-04: hub of 5 demos, shared engine for 2 of them, CI green (typecheck, 22 tests, build, smoke). This session ran the second teardown against a goal Grayson stated for the first time (a **demo for game-dev friends and a test bed**: track hands with a webcam, drive objects, save it out) and wrote the documentation layer that was missing: `NORTH_STAR.md`, `PLANNING.md` rewritten as the gated roadmap, `docs/adr/0001`, four TDDs, the teardown report, a README reframe, and a fix to the stale Motion Recorder doc.
+
+Teardown verdict: core is sound, keep nearly everything. Three demo-visible defects found with evidence: the Global Smoothing slider does nothing in Air Canvas (it is wired to a ref that demo never reads), the hub promises a timeline scrubber that has no UI, and the old docs described a product rather than the goal. Full report: `docs/TEARDOWN-2026-09-06.md`.
 
 ## 📌 Where we stopped
-Six commits shipped and pushed (`3f0a6f7..8c6f889`), CI green on each. Wrap-up done. Nothing in flight on disk.
+Docs written, gates re-run green on the unchanged code, working tree **not committed** (Grayson had not asked for a commit). Commons log written. Nothing else in flight.
 
 ## ▶️ Next concrete step
-Real-webcam click-test in actual Chrome, still the only unverified surface (the in-app preview has no camera and no WebGL, so MediaPipe cannot init there): `npm run dev`, open `http://localhost:3000`, allow camera + mic, then (a) in **Air Canvas** draw a line, wave your hand out of frame mid-stroke, confirm it reconnects and relaxes smooth (Line Reliability at BAL/SMTH); and (b) record in **Motion Recorder** and click Export Audio + Export Kinematics, confirm real data. Alternatives:
-- Further split the 682KB `useMediaPipe`/Three vendor chunk (the one remaining >500KB warning; it is lazy-loaded now, not in the initial load, so lower priority).
-- tsconfig `strict` assessment: real value but a big lift given heavy `any` usage across `types.ts` and the hooks; scope before diving in.
-- Bump CI actions/node when GitHub finalizes the Node 20 runtime deprecation (currently a benign annotation only).
+1. Review and commit this session's docs (`git add -A; git commit; git push`, direct to `main` as usual).
+2. Then roadmap item 1: **landmark-level smoothing** in `hooks/useMediaPipe.ts` (TDD-001 phase 1, S). Lerp each of the 21 landmarks against the previous frame's same-side landmarks using the slider's factor before publishing `lastResultsRef`; add `smoothLandmarks.test.ts` pinning the endpoints. Host-verify in real Chrome: Air Canvas `RAW` vs `MAX` visibly differ. Closes teardown F1.
+
+Alternatives (from `PLANNING.md`): item 2 scrubber (S, closes F2, `seekPlayback` already exists) or item 3 vendor MediaPipe assets (S, do this first if a demo date is inside two weeks).
 
 ## ❓ Open questions
-- None pressing. The Node 20 CI annotation is informational (GitHub forces the actions onto Node 24; not fixable from our config, not failing).
+- Commit these docs as one commit or split (docs vs README)? Suggest one: "Docs: North Star, roadmap, ADR-0001, TDD-001..004, teardown #2".
+- TDD-001 pinch gating: smoothed landmarks (default, Option A) or raw for onset (Option B)? Decide on camera after item 1 lands.
+- TDD-004: commit the ~12 MB of `.task` models or gitignore + `postinstall`? TDD proposes commit; ADR-0001 accepts the size.
+- Still unverified on a real webcam from 2026-09-04: Line Reliability reconnect behaviour and the two export buttons. Fold into the item 1 host check.
 
 ## 🗂️ Changed this session
-- Branch: `main` · 6 commits pushed (`3f0a6f7..8c6f889`), repo level with `origin/main`.
-- Files: `components/shared/{smoothing.ts, SmoothingControl.tsx, smoothing.test.ts}` (new), `components/shared/resolveHands.ts` + `.test.ts`, `components/aircanvas/AirCanvas.tsx`, `components/telemetry/HandTelemetry.tsx`, `types.ts`, `App.tsx`, `README.md`, `.github/workflows/ci.yml` (new), `scripts/smoke.mjs` (new), `package.json`. `.env.local` retired to `_to_delete`.
-- Decisions (+ why): CI scoped to CI + smoke only (no deploy: a getUserMedia app needs HTTPS, separate skill; no doc scaffolding: this repo maintains its own baton). Smoke guards the teardown's real secret-leak finding, not just build existence. `resolveHands` partial-handedness fix (an unlabelled hand takes the free side) was surfaced as a decision, not silently applied, since it changes behavior. `canvas: any` removed from the JSX augmentation because it collided with React's real `<canvas>` type (TS2717); R3F uses the capitalised `<Canvas>` component. Demos code-split with `React.lazy` because all five statically imported dragged the whole Three/MediaPipe stack into the initial chunk.
+- Branch: `main` · 0 commits · working tree has 9 new/modified files, uncommitted.
+- New: `NORTH_STAR.md`, `docs/TEARDOWN-2026-09-06.md`, `docs/adr/0001-demo-first-test-bed.md`, `docs/tdd/TDD-001-tracker-core.md`, `docs/tdd/TDD-002-recording-schema-and-export.md`, `docs/tdd/TDD-003-motion-recorder-upgrade.md`, `docs/tdd/TDD-004-offline-first-assets.md`.
+- Rewritten: `PLANNING.md` (product pitch replaced by the ordered roadmap and demo-day bar), `demos/motion-recorder/README.md` (stale "to be created" claims removed).
+- Edited: `README.md` (test-bed framing, five demos, Start here, Getting started, How to verify; Technical Guide untouched), `HANDOFF.md`.
+- No code changed. One experiment: removed the `types.ts` JSX `any` augmentation, ran `tsc --noEmit` (exit 0), restored the file; recorded as teardown F12 (Kill).
+- Decisions (+ why): North Star is "demo-first test bed" (ADR-0001) because Grayson stated it and the product framing had steered two sessions toward diagnostic polish over the recorder. Per-demo `PLANNING.md` files demoted to idea backlogs rather than deleted (additive, Grayson's call to prune). Teardown report committed into `docs/` this time (the 2026-09-04 one lived only in a scratchpad and was lost to the next session) because it is the evidence base for the TDDs. Docs left uncommitted because no commit was requested.
 
 ---
 
 ## 🕓 Session log
+### 2026-09-06 (early) - Teardown #2 against the stated goal, North Star, roadmap, four TDDs
+- `/pickup` (baton = HANDOFF.md, git clean, level with origin, gates green) then `/teardown`. Grayson's framing this session: a demo for game-dev friends ("you can run motion capture on your hands and use that to control other objects, or save that out") and a test bed; asked for next steps, TDDs, and North Star docs.
+- Read every source file (about 6,000 lines across 32 files), all docs, both prior commons logs, the split spec. Verified claims rather than trusting them: `grep seekPlayback` (no caller), `git ls-files` (no LICENSE), tsc without the JSX augmentation (passes), dist chunk sizes, runtime CDN URLs.
+- Findings, ranked: 🔴 F1 Air Canvas Global Smoothing is a no-op (`AirCanvas.tsx:47` reads `lastResultsRef` raw; smoothing applies only to `handPositionsRef`); 🔴 F2 hub card promises a scrubber (`DemoHub.tsx:436`) with no UI; 🔴 F3 North Star was AI product copy. 🟡 F4 two copy-pasted tracker hooks, engine covers 2 of 5 demos, three rAF loops, two skeleton tables; F5 four runtime CDNs; F6 camera-rate `setMetrics`/`setBlendshapes`; F7 face export is 40 MB+ pretty-printed on the main thread; F8 Motion Recorder is the on-mission demo and the weakest; F9 export undocumented, no importer; F10 stale docs; F11 no LICENSE with Apache headers. 🔵 F12 JSX `any` catch-all is dead; F13 three naming systems; F14 per-demo roadmaps are wish lists; F15 `DEMO_CHART` mutable singleton; F16 steelmans that survived (Tempo Strike, Telemetry, superpowers docs, CI).
+- Wrote: `docs/TEARDOWN-2026-09-06.md` (Rebuild Question, findings, verdict table, v2 sketch, one change first = F1 fix), `NORTH_STAR.md` (three verbs Track/Drive/Save, five-stop tour, done-test, principles, non-goals), `docs/adr/0001-demo-first-test-bed.md`, `docs/tdd/TDD-001` (tracker core + `TrackedFrame`, 5 phases), `TDD-002` (schema v3, worker export, Blender importer), `TDD-003` (scrubber, trail, skeleton replay), `TDD-004` (vendor MediaPipe, build-time Tailwind, synthesized beat, smoke probe), `PLANNING.md` (Now/Next/Later with gates, demo-day bar, reorder rule if a date is close), README reframe, `demos/motion-recorder/README.md` fix.
+- Gates re-run: typecheck clean, 22 tests green, build + smoke OK (code unchanged).
+- Not committed (no request). Commons log: `_agent-commons\log\2026-09-06-claude-code-puppeteer-lab-teardown-2-northstar-tdds.md`.
+
 ### 2026-09-04 (late, cont.) - Shared SmoothingControl, CI + smoke, resolveHands fix, types + README + code-split
 - Picked up (baton = HANDOFF.md, git clean, level with origin). Grayson chose deferred items 2 + 3 + 4, then two more quality rounds, then wrap.
 - Item 2: extracted the byte-identical "Global Smoothing Filter" panel into shared `components/shared/SmoothingControl.tsx` + pure tested `smoothing.ts` (`smoothingToLerp`, `SMOOTHING_PRESETS`); both demos reuse it, dropped unused `Waves` imports. Added the partial-handedness `resolveHands` test, which exposed a latent bug. Commit `6c26e08`.

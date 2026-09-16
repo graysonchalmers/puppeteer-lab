@@ -1,14 +1,44 @@
 # PUPPETEER LAB
-### Tracking and Recording for Games and Media
+### Webcam hand mocap: track it, drive things with it, save it out
 
-**Puppeteer Lab** is a zero-hardware spatial tracking and recording framework for games and media. Using standard webcams and browser-native computer vision, it enables developers and creators to control games, sketch in spatial air, puppeteer 3D characters, and record synchronized mocap and audio without specialized hardware.
+**Puppeteer Lab** is a test bed that proves a plain webcam is enough to motion-capture your hands (and face) in the browser, drive objects with the result, and record the performance for use elsewhere. No gloves, no depth camera, no install beyond `npm`. It exists to show game-dev friends what zero-hardware tracking can do and to be a place to try ideas. The goal and the bar for "done" are in [NORTH_STAR.md](NORTH_STAR.md).
 
-## The Four Core Demos
+## The five demos (the tour, in order)
 
-1. **Air Canvas & Hand Tracking**: Draw in 3D air with right-hand pinches, move lines or hold-to-delete with your left hand, emit gravity sparks, and use air-touch Undo and Clear buttons.
-2. **Games (Tempo Strike)**: Fast-paced 3D spatial gaming where your hands become dual laser sabers to slash beats.
-3. **Motion Recorder & 3D Replay**: Record physical 3D hand motion and audio synchronously, scrub the timeline in 3D, and export mocap data for Blender, Maya, and Unity.
-4. **Face Puppet & Expressions**: Stylized 3D character puppet that mirrors your head movements, eye gaze, and 52 facial blendshapes in real time.
+1. **Hand Telemetry**: what the camera sees. Skeleton, confidence gate, inter-hand distances, smoothing, a pinch-grabbable 3D cube, and a landmark recorder.
+2. **Air Canvas**: drive a 2D thing. Pinch to draw glowing lines, grab and move them with the other hand, dwell to undo or clear, with a Line Reliability control that bridges tracking dropouts.
+3. **Tempo Strike**: drive 3D things in a game loop. Your hands become two sabers; slice beats in time with the music; velocity scores.
+4. **Motion Recorder**: save it out. Record hand motion with microphone audio, replay it in a 3D void you can orbit, export as JSON or WebM. (Scrubbing and skeleton replay are next; see the roadmap.)
+5. **Face Puppet**: same pattern, different model. A stylized puppet driven by 478 landmarks and 52 blendshapes, with recorded voice replay.
+
+## Start here
+
+- [NORTH_STAR.md](NORTH_STAR.md): what this is, who it is for, what done looks like.
+- [PLANNING.md](PLANNING.md): the ordered, gated roadmap and the demo-day checklist.
+- [docs/tdd/](docs/tdd/): technical design docs for each workstream (tracker core, recording schema and export, recorder upgrade, offline assets).
+- [docs/adr/](docs/adr/): decisions and why.
+- [docs/TEARDOWN-2026-09-06.md](docs/TEARDOWN-2026-09-06.md): the latest adversarial review, with evidence.
+- [HANDOFF.md](HANDOFF.md): where the last session stopped and the next concrete step.
+
+## Getting started
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000` in desktop Chrome, allow the camera (and the microphone for the recorder demos), and pick a demo from the hub. Tracking initializes in a few seconds. Today the app fetches the MediaPipe WASM and models from a CDN on first load; vendoring them so the build runs offline is roadmap item 3.
+
+## How to verify
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run smoke
+```
+
+CI runs the same four steps on every push. They prove types, the pure math (hand assignment, smoothing, line reliability), the bundle, and that no secret leaks into `dist/`. They cannot prove tracking: the automated preview has no camera and no WebGL. Anything hand-driven is verified by a person in real Chrome and the result is written in `HANDOFF.md`.
 
 ## Technical Guide
 
@@ -141,4 +171,4 @@ It is crucial to have a 2D overlay to verify tracking.
 
 ## Roadmap
 
-For future plans and feature tracking, please see [PLANNING.md](./PLANNING.md).
+The ordered plan with gates is [PLANNING.md](./PLANNING.md). The per-demo `demos/*/PLANNING.md` files are unranked idea backlogs, not commitments.
