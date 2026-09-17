@@ -102,6 +102,8 @@ export function useTracker(
               tick();
             }
           };
+        } else {
+          stream.getTracks().forEach((t) => t.stop());
         }
       } catch (err) {
         console.error('Camera Error:', err);

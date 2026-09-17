@@ -25,6 +25,16 @@ export function smoothingToLerp(amount: number): number {
   return 1.0 - amount * 0.9;
 }
 
+/**
+ * Inverse of smoothingToLerp: recovers the 0..1 UI amount from a per-frame
+ * LERP alpha. Used at the useMediaPipe adapter boundary, which stores the
+ * alpha directly (as the pre-Phase-2 hook always did) but must hand
+ * useTracker a UI amount (useTracker applies smoothingToLerp itself).
+ */
+export function lerpToSmoothing(alpha: number): number {
+  return (1 - alpha) / 0.9;
+}
+
 export interface LandmarkLike { x: number; y: number; z: number }
 
 /**

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, it, expect } from 'vitest';
-import { smoothingToLerp, SMOOTHING_PRESETS } from './smoothing';
+import { smoothingToLerp, lerpToSmoothing, SMOOTHING_PRESETS } from './smoothing';
 
 describe('smoothingToLerp', () => {
   it('maps 0 (raw) to a 1.0 passthrough LERP', () => {
@@ -16,6 +16,20 @@ describe('smoothingToLerp', () => {
 
   it('decreases as smoothing rises (guards against a flipped sign)', () => {
     expect(smoothingToLerp(0.75)).toBeLessThan(smoothingToLerp(0.4));
+  });
+});
+
+describe('lerpToSmoothing', () => {
+  it('is the exact inverse of smoothingToLerp at each SMOOTHING_PRESETS value', () => {
+    for (const p of SMOOTHING_PRESETS) {
+      const alpha = smoothingToLerp(p.val);
+      expect(lerpToSmoothing(alpha)).toBeCloseTo(p.val, 10);
+    }
+  });
+
+  it('round-trips the useMediaPipe adapter default alpha (0.6)', () => {
+    const uiAmount = lerpToSmoothing(0.6);
+    expect(smoothingToLerp(uiAmount)).toBeCloseTo(0.6, 10);
   });
 });
 

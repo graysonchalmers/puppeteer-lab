@@ -9,6 +9,7 @@ export { mapHandToWorld } from '../components/shared/mapHandToWorld';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useTracker } from './useTracker';
+import { lerpToSmoothing } from '../components/shared/smoothing';
 import { Landmark } from '../components/shared/trackerTypes';
 
 interface AdapterHandResult {
@@ -18,7 +19,7 @@ interface AdapterHandResult {
 
 export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [smoothing, setSmoothingState] = useState(0.6);
-  const tracker = useTracker(videoRef, { hands: true, smoothing, confidence: 0.5 });
+  const tracker = useTracker(videoRef, { hands: true, smoothing: lerpToSmoothing(smoothing), confidence: 0 });
 
   const setSmoothingFactor = useCallback((factor: number) => {
     setSmoothingState(Math.max(0.01, Math.min(1.0, factor)));
