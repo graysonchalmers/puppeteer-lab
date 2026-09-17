@@ -21,6 +21,69 @@ export interface Stroke {
   settleMsLeft: number;
 }
 
+const OPEN_HAND_RGB = { r: 156, g: 163, b: 175 }; // neutral gray, no pinch signal yet
+
+const hexToRgb = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+};
+
+/**
+ * Interpolates from neutral gray (open hand) to a hand's accent color as the
+ * thumb/index gap closes from `farPx` down to `nearPx` (the pinch threshold).
+ * Below `nearPx` returns the solid accent; at or above `farPx`, neutral gray.
+ */
+export const pinchProximityColor = (
+  dist: number,
+  accentHex: string,
+  farPx = 120,
+  nearPx = 30
+): string => {
+  const t = Number.isFinite(dist) ? 1 - Math.min(1, Math.max(0, (dist - nearPx) / (farPx - nearPx))) : 0;
+  const accent = hexToRgb(accentHex);
+  const r = Math.round(OPEN_HAND_RGB.r + (accent.r - OPEN_HAND_RGB.r) * t);
+  const g = Math.round(OPEN_HAND_RGB.g + (accent.g - OPEN_HAND_RGB.g) * t);
+  const b = Math.round(OPEN_HAND_RGB.b + (accent.b - OPEN_HAND_RGB.b) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+};
+
+/**
+ * Draws the thumb-to-index tie line with a persistent instruction label at
+ * its midpoint. Runs whenever the hand is tracked, regardless of pinch
+ * state, so `color` (from pinchProximityColor) is the only proximity cue
+ * before the pinch threshold fires.
+ */
+export const renderPinchLine = (
+  ctx: CanvasRenderingContext2D,
+  thumbX: number,
+  thumbY: number,
+  indexX: number,
+  indexY: number,
+  color: string,
+  label: string
+) => {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(thumbX, thumbY);
+  ctx.lineTo(indexX, indexY);
+  ctx.stroke();
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(thumbX, thumbY, 3, 0, Math.PI * 2);
+  ctx.arc(indexX, indexY, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (label) {
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, (thumbX + indexX) / 2, (thumbY + indexY) / 2 - 12);
+  }
+  ctx.restore();
+};
+
 export interface TracerParticle {
   x: number;
   y: number;
@@ -347,6 +410,33 @@ export const renderStrokes = (
     ctx.restore();
   }
 
+  ctx.restore();
+};
+
+/**
+ * Cold-start HUD block: shown in the bottom-left corner while neither hand is
+ * tracked yet, so there's an instruction on screen before any hand appears
+ * (the per-hand tie-line tags take over as the live status once a hand shows up).
+ */
+export const renderIdleInstructions = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+  const lines = [
+    { text: 'RIGHT HAND: pinch thumb + index to draw', color: '#EE3B2B' },
+    { text: 'LEFT HAND: pinch near a line to move, hold 1s to delete', color: '#38BDF8' }
+  ];
+  const x = 24;
+  const lineHeight = 16;
+  const y0 = h - 24 - (lines.length - 1) * lineHeight;
+
+  ctx.save();
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 4;
+  lines.forEach((line, i) => {
+    ctx.fillStyle = line.color;
+    ctx.fillText(line.text, x, y0 + i * lineHeight);
+  });
   ctx.restore();
 };
 

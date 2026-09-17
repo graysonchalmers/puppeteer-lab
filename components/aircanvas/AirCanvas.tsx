@@ -24,6 +24,9 @@ import {
   updateAndRenderParticles,
   renderStrokes,
   renderPinchReticle,
+  renderPinchLine,
+  pinchProximityColor,
+  renderIdleInstructions,
   renderAirTouchControls
 } from './pinchTracer';
 import {
@@ -98,6 +101,10 @@ const AirCanvas: React.FC<AirCanvasProps> = ({ onBack }) => {
       false
     );
 
+    if (!leftHandLandmarks && !rightHandLandmarks) {
+      renderIdleInstructions(ctx, canvas.width, canvas.height);
+    }
+
     const dtSeconds = 0.016;
 
     // 1. Right Hand: Vector Line Drawing (< 30px pinch threshold)
@@ -132,6 +139,15 @@ const AirCanvas: React.FC<AirCanvasProps> = ({ onBack }) => {
       const rIndex = rightHandLandmarks[8];
       const rMidX = ((1 - rThumb.x) + (1 - rIndex.x)) * 0.5 * canvas.width;
       const rMidY = (rThumb.y + rIndex.y) * 0.5 * canvas.height;
+      renderPinchLine(
+        ctx,
+        (1 - rThumb.x) * canvas.width,
+        rThumb.y * canvas.height,
+        (1 - rIndex.x) * canvas.width,
+        rIndex.y * canvas.height,
+        pinchProximityColor(rDist, '#EE3B2B'),
+        rDist < 30 ? '' : 'PINCH TO DRAW'
+      );
       if (rDist < 30) {
         rightSample = { x: rMidX, y: rMidY };
         rSampleDist = rDist;
@@ -186,6 +202,16 @@ const AirCanvas: React.FC<AirCanvasProps> = ({ onBack }) => {
       const lMidX = ((1 - lThumb.x) + (1 - lIndex.x)) * 0.5 * canvas.width;
       const lMidY = (lThumb.y + lIndex.y) * 0.5 * canvas.height;
       const isLeftPinching = lDist < 30;
+
+      renderPinchLine(
+        ctx,
+        (1 - lThumb.x) * canvas.width,
+        lThumb.y * canvas.height,
+        (1 - lIndex.x) * canvas.width,
+        lIndex.y * canvas.height,
+        pinchProximityColor(lDist, '#38BDF8'),
+        lDist < 30 ? '' : 'PINCH TO GRAB'
+      );
 
       leftPinchPos = { x: lMidX, y: lMidY };
 
