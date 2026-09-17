@@ -22,7 +22,7 @@ What must be true before the tour is shown to friends. Each line maps to an item
 
 ## ▶️ Now (in order)
 
-Items 1 through 4 landed 2026-09-16 (code-complete, gate-green, **not yet camera-verified**; checklist in `HANDOFF.md`). Now is empty until host verification closes them; the next build item is 5 under Next.
+Items 1 through 4 landed 2026-09-16 (code-complete, gate-green, **not yet camera-verified**; checklist in `HANDOFF.md`). Item 6 landed the same day (code-complete, gate-green; its P2 long-task claim and P3 real-take claim are **host-pending, not verified** -- P3 is synthetic-fixture-verified only; checklist in `HANDOFF.md`). Now holds items 1 through 4 and 6 until host verification closes them; the next build item to pick up is 5 under Next.
 
 | # | Item | Size | From | Gate |
 |---|---|---|---|---|
@@ -30,13 +30,13 @@ Items 1 through 4 landed 2026-09-16 (code-complete, gate-green, **not yet camera
 | 2 ✅ | **Scrubber** in `RecorderControls` (pause on drag, seek, resume), binary-search frame lookup, hub card copy updated in the same commit | S | [TDD-003](docs/tdd/TDD-003-motion-recorder-upgrade.md) P1 | `findFrameIndex` test; host: scrubbed position and audio agree by ear. Closes F2. |
 | 3 ✅ | **Vendor MediaPipe** WASM and models into `public/mediapipe/`, one `assets.ts` with a CDN env override | S | [TDD-004](docs/tdd/TDD-004-offline-first-assets.md) P1 | With DevTools Network offline after first load, all five demos initialize tracking. |
 | 4 ✅ | **Housekeeping batch**: add `LICENSE` (Apache-2.0 to match the headers); delete the `types.ts` JSX `any` augmentation (tsc passes without it); fix the stale "lives in DebugView" comment in `lineReliability.ts`; hub card title "Games" becomes "Tempo Strike"; throttle the camera-rate `setMetrics` / `setBlendshapes` readouts to 10 Hz | S | Teardown F6, F10, F11, F12, F13 | tsc, test, build, smoke green; React Profiler shows sidebar commits at or under 10 per second while tracking. |
+| 6 ✅ | **Recording schema v3** with measured fps and a v2 migration shim, worker serialization, then the **Blender importer** | M | [TDD-002](docs/tdd/TDD-002-recording-schema-and-export.md) P1 to P3 | Round-trip and migration tests; a 30 s face take exports with no long task over 100 ms; host: a real take opens in Blender 4.x and the empties move. Screenshot committed. **Host-pending, not verified:** P2's long-task claim, and P3's real-take claim (synthetic-fixture-verified only; see `HANDOFF.md`). |
 
 ## ⏭️ Next
 
 | # | Item | Size | From | Gate |
 |---|---|---|---|---|
 | 5 | **`TrackedFrame` + `useTracker`**: one frame shape, `useMediaPipe` and `useFaceTracker` become adapters, face folds into the same loop, then consumers move and the adapters are deleted. Run as a `phased-rebuild`. | M | [TDD-001](docs/tdd/TDD-001-tracker-core.md) P2 to P4 | Per-phase gates in the TDD; final: no `lastResultsRef` / `handPositionsRef` / `faceResultRef` left in the tree; all five demos host-verified. |
-| 6 | **Recording schema v3** with measured fps and a v2 migration shim, worker serialization, then the **Blender importer** | M | [TDD-002](docs/tdd/TDD-002-recording-schema-and-export.md) P1 to P3 | Round-trip and migration tests; a 30 s face take exports with no long task over 100 ms; host: a real take opens in Blender 4.x and the empties move. Screenshot committed. |
 | 7 | **Motion Recorder trail + skeleton replay** (needs items 5 and 6) | S + S | [TDD-003](docs/tdd/TDD-003-motion-recorder-upgrade.md) P2, P3 | 50 fps or better with a 60 s take buffered; a new take replays as a moving hand; a v2 file still shows spheres. |
 | 8 | **Tailwind at build time**, **synthesized 140 BPM beat** for Tempo Strike, **smoke probe** that fails on any CDN URL in `dist/` | S | [TDD-004](docs/tdd/TDD-004-offline-first-assets.md) P2 to P4 | Hub screenshot before/after identical; Tempo Strike starts offline; CI red when a CDN URL is reintroduced. |
 | 9 | **README**: GIF of the tour, three-command quick start, a "how to verify" section (gates plus the host checklist) | S | Teardown Newcomer lens; `project-setup` kit | A friend who has never seen the repo runs it from the README alone. |
@@ -64,3 +64,4 @@ Reorder Now to 3, 2, 4, 1. Offline first (nothing else matters if tracking canno
 - **2026-09-04**: imported from the AI Studio export; public repo; teardown #1 and its fixes (audio and kinematics exports, Gemini key removed from the bundle); drei bump; Line Reliability for Air Canvas; DebugView split into Air Canvas + Hand Telemetry on a shared engine; shared `SmoothingControl`; CI (typecheck, test, build, smoke); `resolveHands` partial-handedness fix; tsc clean; README `worldZ` fix; demos code-split.
 - **2026-09-06**: teardown #2 ([docs/TEARDOWN-2026-09-06.md](docs/TEARDOWN-2026-09-06.md)); `NORTH_STAR.md`; ADR-0001; TDD-001 through TDD-004; this roadmap; stale demo docs fixed.
 - **2026-09-16**: Now items 1 to 4 shipped (landmark smoothing `a69d3cd`, scrubber `21f319a`+`121eacc`, vendored MediaPipe `8c863b1`+`2a38fcf`, housekeeping `bcbde1d`) plus the portfolio build stamp `68627b9`. Gate-green; camera verification outstanding.
+- **2026-09-16 (cont.)**: item 6 (recording schema v3 + Blender importer, TDD-002 P1 to P3) shipped: v3 envelope build/serialize/migrateV2 (`9652985`), worker serialization + chunked fallback (`d552b10`), Blender importer + doc with screenshot (`78adf10`, `6ebc5a7`). Final-review fix wave the same day: Blender's `SequenceEditor.sequences` -> `.strips` rename (4.4+) handled with a fallback, importer now also accepts the `puppeteer-lab/kinematics` schema, this file updated. Gate-green; P2's long-task claim and P3's real-take claim remain host-pending (P3 synthetic-fixture-verified only).
