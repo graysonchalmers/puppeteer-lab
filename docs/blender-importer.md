@@ -1,9 +1,18 @@
 # Blender importer
 
-`tools/blender_import_recording.py` loads a puppeteer-lab v3 recording
-(`schema: "puppeteer-lab/recording"`, see `components/shared/recordingSchema.ts`
-and `docs/tdd/TDD-002-recording-schema-and-export.md`) into a Blender scene as
-keyframed Empties, so a take can be scrubbed and previewed inside Blender.
+`tools/blender_import_recording.py` loads a puppeteer-lab v3 recording into a
+Blender scene as keyframed Empties, so a take can be scrubbed and previewed
+inside Blender. It accepts either schema `"puppeteer-lab/recording"` (the
+full file, including raw landmarks and audio) or `"puppeteer-lab/kinematics"`
+(the lighter export-only file meant for animation tools: no raw landmarks or
+audio, same keyframed Empties result). See
+`components/shared/recordingSchema.ts` and
+`docs/tdd/TDD-002-recording-schema-and-export.md`.
+
+**Blender version:** 4.4+ (host-verified on 5.1.1). The importer's audio
+import uses `SequenceEditor.strips`, which was renamed from `.sequences` in
+Blender 4.4; a fallback to `.sequences` is included for older versions but
+has not been tested.
 
 ## Running it
 

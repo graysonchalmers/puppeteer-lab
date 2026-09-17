@@ -2,9 +2,11 @@
 @license
 SPDX-License-Identifier: Apache-2.0
 
-Blender importer for puppeteer-lab recording v3 files
-(schema "puppeteer-lab/recording", see components/shared/recordingSchema.ts
-and docs/tdd/TDD-002-recording-schema-and-export.md).
+Blender importer for puppeteer-lab recording v3 files. Accepts either schema
+"puppeteer-lab/recording" (the full file) or "puppeteer-lab/kinematics" (the
+lighter export-only file for animation tools, no raw landmarks or audio) --
+see components/shared/recordingSchema.ts and
+docs/tdd/TDD-002-recording-schema-and-export.md.
 
 Run it from Blender's Text Editor: open this file in a Text Editor area, set
 DEFAULT_JSON_PATH below (or the PUPPETEER_LAB_TAKE environment variable) to
@@ -27,7 +29,7 @@ import sys
 
 # --- Plain functions: no bpy dependency, statically checkable outside Blender ---
 
-SUPPORTED_SCHEMA = "puppeteer-lab/recording"
+SUPPORTED_SCHEMAS = ("puppeteer-lab/recording", "puppeteer-lab/kinematics")
 SUPPORTED_VERSION = 3
 HAND_LANDMARK_COUNT = 21
 HAND_EMPTY_DISPLAY_SIZE = 0.03
@@ -42,8 +44,8 @@ def load_envelope(path):
         data = json.load(f)
     schema = data.get("schema")
     version = data.get("version")
-    if schema != SUPPORTED_SCHEMA:
-        raise ValueError("Unsupported schema %r, expected %r" % (schema, SUPPORTED_SCHEMA))
+    if schema not in SUPPORTED_SCHEMAS:
+        raise ValueError("Unsupported schema %r, expected one of %r" % (schema, SUPPORTED_SCHEMAS))
     if version != SUPPORTED_VERSION:
         raise ValueError("Unsupported version %r, expected %r" % (version, SUPPORTED_VERSION))
     return data
@@ -248,7 +250,13 @@ def _import_audio(envelope, json_path):
     scene = bpy.context.scene
     if scene.sequence_editor is None:
         scene.sequence_editor_create()
-    return scene.sequence_editor.sequences.new_sound(
+    # SequenceEditor.sequences was renamed to .strips in Blender 4.4+
+    # (host-verified: 5.1.1 only has .strips / .strips_all, no .sequences).
+    # Fall back to .sequences for older Blender versions.
+    strips = getattr(scene.sequence_editor, "strips", None)
+    if strips is None:
+        strips = scene.sequence_editor.sequences
+    return strips.new_sound(
         name="PuppeteerLabAudio", filepath=out_path, channel=1, frame_start=1
     )
 
