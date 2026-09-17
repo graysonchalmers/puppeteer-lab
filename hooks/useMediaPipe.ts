@@ -9,30 +9,9 @@ import { HandLandmarker, FilesetResolver, HandLandmarkerResult } from '@mediapip
 import * as THREE from 'three';
 import { smoothLandmarks, LandmarkLike } from '../components/shared/smoothing';
 import { MEDIAPIPE_WASM_PATH, HAND_MODEL_PATH } from './mediapipeAssets';
+import { mapHandToWorld } from '../components/shared/mapHandToWorld';
 
-// Mapping 2D normalized coordinates to 3D game world.
-export const mapHandToWorld = (x: number, y: number, z: number = 0): THREE.Vector3 => {
-  const GAME_X_RANGE = 5; 
-  const GAME_Y_RANGE = 3.5;
-  const Y_OFFSET = 0.8;
-
-  // MediaPipe often returns mirrored X if facingMode is 'user'.
-  // We might need to invert X depending on the final behavior.
-  // For now, assuming standard mirroring where 0 is left-screen (user's right hand physically if mirrored).
-  const worldX = (0.5 - x) * GAME_X_RANGE; 
-  
-  // Invert Y because screen Y is down, world Y is up
-  const worldY = (1.0 - y) * GAME_Y_RANGE - (GAME_Y_RANGE / 2) + Y_OFFSET;
-
-  // Z-Depth Estimation
-  // 'z' input is the deviation from baseline hand size.
-  // Positive z = Closer (Scale > Baseline)
-  // Negative z = Farther (Scale < Baseline)
-  // We scale this up to make movement in Z perceptible in the game world.
-  const worldZ = z * 8; 
-
-  return new THREE.Vector3(worldX, Math.max(0.1, worldY), worldZ);
-};
+export { mapHandToWorld } from '../components/shared/mapHandToWorld';
 
 export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
