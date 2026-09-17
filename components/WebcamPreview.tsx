@@ -5,12 +5,20 @@
 
 
 import React, { useEffect, useRef } from 'react';
-import { HandLandmarkerResult } from '@mediapipe/tasks-vision';
 import { COLORS } from '../types';
+
+// Shape-compatible with both the old HandLandmarkerResult and the new
+// useMediaPipe adapter's AdapterHandResult (hooks/useMediaPipe.ts) — this
+// component only ever reads landmarks/handedness, never the extra
+// worldLandmarks/handednesses fields HandLandmarkerResult also carries.
+interface HandResultsLike {
+    landmarks: { x: number; y: number; z: number }[][];
+    handedness: { categoryName: string }[][];
+}
 
 interface WebcamPreviewProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
-    resultsRef: React.MutableRefObject<HandLandmarkerResult | null>;
+    resultsRef: React.MutableRefObject<HandResultsLike | null>;
     isCameraReady: boolean;
 }
 
