@@ -1,0 +1,9 @@
+# 2026-09-16 (early) - Grill, plan, and ship roadmap items 1-3 + build stamp (Subagent-Driven)
+
+_Migrated verbatim from the inline HANDOFF.md session log on 2026-09-22._
+
+- Grayson replied "1 + 2 + 3 + 4" to the 2026-09-06 menu: commit docs, then smoothing, vendor assets, scrubber, and grill the TDDs. Committed docs `d0abbed`, pushed.
+- Grill (subagent, read-only, against real code): all three phases GO-WITH-CHANGES. Catches folded into the plan: smoothing must live in `predictWebcam` (where `lastResultsRef` is assigned) and the two `lerpVectors` in `processResults` must go or alpha compounds; absent side resets `prev`; rebuild the result object; "pause" cannot be `isPlaying=false` (consumers switch to live feed), so a `pausedRef`; scrub-from-stopped must enter paused playback; `duration<=0` loop spam guard; `import.meta.env` needs `vite/client` types; WASM is 4 files/18 MB (gitignore, regenerate), models ~11.5 MB (commit); offline gate must use `vite preview` + adapter off since DevTools Offline blocks lazy chunks.
+- Plan `docs/superpowers/plans/2026-09-16-now-items-1-3.md` (4 tasks). Subagent-Driven: fresh implementer + reviewer per task; Task 3 had one fix round (atomic model download + content-length check); final whole-branch review (Opus) found one must-fix (scrub-from-stopped left `isPlaying+paused` with Record disabled and no exit) fixed in `121eacc` with `isPaused` state + `stopPlayback` + Stop button; four lows fixed in the same wave; four parked with rulings (above).
+- Gates green at HEAD: typecheck, 31 tests, build, smoke (now also asserts the six vendored files and the stamp in a JS asset). Dev-server network check: all `/mediapipe/...` requests from localhost 200, zero CDN requests.
+- Commons log: `_agent-commons\log\2026-09-16-claude-code-puppeteer-lab-now-items-1-3-shipped.md`. Idea file: kimodo/motion-bricks note recorded under Later (resolution line appended).
