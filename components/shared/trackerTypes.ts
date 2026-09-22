@@ -31,7 +31,8 @@ export interface TrackedHand {
 }
 
 export interface TrackedFace {
-  landmarks: Landmark[];                 // 478
+  landmarks: Landmark[];                 // 478, FILTERED when useTracker passes a One Euro bank (what demos draw)
+  rawLandmarks: Landmark[];              // 478, exactly as MediaPipe returned them
   blendshapes: Record<string, number>;   // ARKit-style scores by name
   transform: number[] | null;            // 16 floats, column-major, from facialTransformationMatrixes
 }

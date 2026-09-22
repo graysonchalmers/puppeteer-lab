@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, it, expect } from 'vitest';
-import { buildFrame, RawHandResult } from './buildFrame';
+import { buildFrame, RawHandResult, RawFaceResult } from './buildFrame';
 import { TrackedFrame } from './trackerTypes';
+import { createOneEuroBank } from './oneEuro';
 
 const landmarks21 = (fill: (i: number) => { x: number; y: number; z: number }) =>
   Array.from({ length: 21 }, (_, i) => fill(i));
@@ -108,5 +109,43 @@ describe('buildFrame', () => {
     expect(frame.hands).toHaveLength(0);
     expect(frame.left).toBeNull();
     expect(frame.right).toBeNull();
+  });
+});
+
+const face478 = (x: number) => Array.from({ length: 478 }, (_, i) => ({ x, y: 0.5 + i * 1e-4, z: 0 }));
+const faceResult = (x: number): RawFaceResult => ({
+  faceLandmarks: [face478(x)],
+  faceBlendshapes: [{ categories: [{ categoryName: 'jawOpen', score: 0.4 }] }],
+});
+const faceOpts = { confidence: 0.5, smoothingAlpha: 1 };
+
+describe('buildFrame face', () => {
+  it('face is null when no face result is passed', () => {
+    expect(buildFrame(null, null, null, 0, faceOpts).face).toBeNull();
+  });
+
+  it('without a filter, landmarks equal raw landmarks', () => {
+    const f = buildFrame(null, null, faceResult(0.3), 0, faceOpts);
+    expect(f.face!.landmarks[0].x).toBe(0.3);
+    expect(f.face!.rawLandmarks[0].x).toBe(0.3);
+    expect(f.face!.blendshapes.jawOpen).toBe(0.4);
+  });
+
+  it('with a filter, landmarks are filtered and rawLandmarks stay raw', () => {
+    const faceFilter = createOneEuroBank();
+    const a = buildFrame(null, null, faceResult(0.3), 0, { ...faceOpts, faceFilter });
+    const b = buildFrame(a, null, faceResult(0.6), 16, { ...faceOpts, faceFilter });
+    expect(b.face!.rawLandmarks[0].x).toBe(0.6);
+    expect(b.face!.landmarks[0].x).toBeGreaterThan(0.3);
+    expect(b.face!.landmarks[0].x).toBeLessThan(0.6);
+  });
+
+  it('a lost face resets the filter so re-entry does not swoop', () => {
+    const faceFilter = createOneEuroBank();
+    const a = buildFrame(null, null, faceResult(0.3), 0, { ...faceOpts, faceFilter });
+    const lost = buildFrame(a, null, { faceLandmarks: [] }, 16, { ...faceOpts, faceFilter });
+    expect(lost.face).toBeNull();
+    const back = buildFrame(lost, null, faceResult(0.8), 32, { ...faceOpts, faceFilter });
+    expect(back.face!.landmarks[0].x).toBe(0.8);
   });
 });

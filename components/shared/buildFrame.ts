@@ -11,6 +11,7 @@ import { Landmark, Vec3, TrackedHand, TrackedFace, TrackedFrame } from './tracke
 import { resolveHands } from './resolveHands';
 import { smoothLandmarks } from './smoothing';
 import { mapHandToWorld } from './mapHandToWorld';
+import { OneEuroBank } from './oneEuro';
 
 export interface RawHandResult {
   landmarks: Landmark[][];
@@ -26,6 +27,8 @@ export interface RawFaceResult {
 export interface BuildFrameOptions {
   confidence: number;
   smoothingAlpha: number;
+  /** Stateful One Euro bank for face landmarks, owned by useTracker. Absent = raw. */
+  faceFilter?: OneEuroBank;
 }
 
 // Wrist (0) to middle-finger-MCP (9) distance at a "neutral" hand distance
@@ -66,8 +69,12 @@ function buildTrackedHand(
   return { side, score, landmarks, rawLandmarks, world, tip, velocity, pinch };
 }
 
-function buildTrackedFace(faceResult: RawFaceResult): TrackedFace | null {
-  if (!faceResult.faceLandmarks || faceResult.faceLandmarks.length === 0) return null;
+function buildTrackedFace(faceResult: RawFaceResult, now: number, filter?: OneEuroBank): TrackedFace | null {
+  if (!faceResult.faceLandmarks || faceResult.faceLandmarks.length === 0) {
+    // Face lost: reset so the next appearance starts from its own position.
+    filter?.reset();
+    return null;
+  }
 
   const blendshapes: Record<string, number> = {};
   for (const cat of faceResult.faceBlendshapes?.[0]?.categories ?? []) {
@@ -77,7 +84,9 @@ function buildTrackedFace(faceResult: RawFaceResult): TrackedFace | null {
   const rawMatrix = faceResult.facialTransformationMatrixes?.[0]?.data ?? null;
   const transform = rawMatrix ? Array.from(rawMatrix) : null;
 
-  return { landmarks: faceResult.faceLandmarks[0], blendshapes, transform };
+  const rawLandmarks = faceResult.faceLandmarks[0];
+  const landmarks = filter ? filter.filter(rawLandmarks, now) : rawLandmarks;
+  return { landmarks, rawLandmarks, blendshapes, transform };
 }
 
 export function buildFrame(
@@ -110,7 +119,9 @@ export function buildFrame(
     else left = trackedHand;
   }
 
-  const face = faceResult ? buildTrackedFace(faceResult) : null;
+  // faceResult === null means "face not requested or skipped this tick" and
+  // must NOT reset the filter; only an empty result (face lost) does.
+  const face = faceResult ? buildTrackedFace(faceResult, now, options.faceFilter) : null;
 
   return { t: now, dt, hands, left, right, face };
 }
