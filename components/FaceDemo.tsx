@@ -12,6 +12,10 @@ import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
 import { drawPuppet } from './face/FaceMeshRenderer';
 import { Landmark } from './shared/trackerTypes';
+import { renderTakeToVideo } from './face/exportVideo';
+import { buildPackZip, extensionForMime, takeStamp } from './face/exportPack';
+import { downloadBlob } from './shared/download';
+import { FrameData } from '../types';
 
 interface FaceDemoProps {
   onBack: () => void;
@@ -46,6 +50,10 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const [showGazeRays, setShowGazeRays] = useState<boolean>(false);
   const [showMocapDots, setShowMocapDots] = useState<boolean>(false);
 
+  const [exportState, setExportState] = useState<{ kind: 'video' | 'pack'; ms: number } | null>(null);
+  const exportAbortRef = useRef<AbortController | null>(null);
+  const exportFrameRef = useRef<FrameData | null>(null);
+
   useEffect(() => {
       let animationFrameId: number;
       const ctx = canvasRef.current?.getContext('2d');
@@ -74,8 +82,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               let currentLandmarks: Landmark[] | undefined;
               let currentBlendshapesRecord: Record<string, number> = {};
 
+              if (exportFrameRef.current) {
+                  currentLandmarks = exportFrameRef.current.faceLandmarks;
+                  currentBlendshapesRecord = exportFrameRef.current.blendshapes || {};
+              }
               // If Playing, read from buffer
-              if (recorder.isPlaying) {
+              else if (recorder.isPlaying) {
                   const frame = recorder.getPlaybackFrame();
                   if (frame) {
                       currentLandmarks = frame.faceLandmarks;
@@ -149,6 +161,58 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       return () => cancelAnimationFrame(animationFrameId);
   }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots]);
 
+  const runExport = async (kind: 'video' | 'pack') => {
+      const stage = canvasRef.current;
+      if (!recorder.hasData || !stage || exportAbortRef.current) return;
+      recorder.stopPlayback();
+
+      const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+      const width = even(Math.min(stage.width, 1280));
+      const height = even((width * stage.height) / stage.width);
+      const ctrl = new AbortController();
+      exportAbortRef.current = ctrl;
+      setExportState({ kind, ms: 0 });
+
+      let mouthOpen = false;
+      let lastProgress = 0;
+      try {
+          const audio = recorder.getAudio();
+          const video = await renderTakeToVideo({
+              frames: recorder.getFrames(),
+              durationMs: recorder.durationMs,
+              audio,
+              width,
+              height,
+              signal: ctrl.signal,
+              draw: (ctx, frame, w, h) => {
+                  exportFrameRef.current = frame;
+                  const face = frame.faceLandmarks ?? null;
+                  if (face) mouthOpen = nextMouthOpen(mouthOpen, mouthOpenRatio(face, videoAspectRef.current));
+                  drawPuppet(ctx, { face, mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: videoAspectRef.current });
+              },
+              onProgress: (ms) => {
+                  const now = performance.now();
+                  if (now - lastProgress >= 100) { lastProgress = now; setExportState({ kind, ms }); }
+              },
+          });
+
+          const stamp = takeStamp(new Date());
+          if (kind === 'video') {
+              downloadBlob(video.blob, `puppet-take-${stamp}.${extensionForMime(video.mimeType)}`);
+          } else {
+              const recordingJson = await recorder.buildRecordingBlob('full');
+              const zip = await buildPackZip({ video, recordingJson, audio });
+              downloadBlob(new Blob([zip], { type: 'application/zip' }), `puppet-take-${stamp}.zip`);
+          }
+      } catch (err: any) {
+          if (err?.name !== 'AbortError') alert(`Export failed: ${err?.message ?? err}`);
+      } finally {
+          exportAbortRef.current = null;
+          exportFrameRef.current = null;
+          setExportState(null);
+      }
+  };
+
   return (
     <div className="relative w-full h-full bg-[#090A0C] flex flex-col md:flex-row select-none">
        {/* Top Header */}
@@ -218,6 +282,23 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               </div>
           )}
 
+          {exportState && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-3 bg-[#111317]/95 border border-white/15 rounded-lg px-3 py-2 font-mono text-[11px] text-gray-200 shadow-2xl">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#EE3B2B] animate-pulse" />
+                  <span>
+                      RENDERING {exportState.kind === 'pack' ? 'PACK' : 'VIDEO'}{' '}
+                      <span className="tabular-nums text-white">{(exportState.ms / 1000).toFixed(1)}s / {(recorder.durationMs / 1000).toFixed(1)}s</span>
+                  </span>
+                  <span className="text-gray-500">real time, keep this tab in front</span>
+                  <button
+                      onClick={() => exportAbortRef.current?.abort()}
+                      className="px-2 py-0.5 rounded border border-white/20 hover:bg-white/10 text-white"
+                  >
+                      Cancel
+                  </button>
+              </div>
+          )}
+
           {/* Recorder Controls Overlay */}
           <div className="absolute bottom-8 right-8 pointer-events-auto z-30">
                <RecorderControls 
@@ -238,6 +319,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   onStopPlayback={recorder.stopPlayback}
                   onExport={recorder.exportData}
                   onImport={recorder.loadData}
+                  busy={exportState !== null}
+                  primaryExport={{ label: 'Video', onSelect: () => runExport('video') }}
+                  extraExports={[
+                      { id: 'video', label: 'Video', hint: 'Puppet + your voice, as it plays', onSelect: () => runExport('video') },
+                      { id: 'pack', label: 'Pack (.zip)', hint: 'Video + recording.json + audio', onSelect: () => runExport('pack') },
+                  ]}
                />
           </div>
       </div>

@@ -5,7 +5,7 @@
 */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Circle, Square, Play, Pause, Download, Upload, ChevronDown, Music, Activity, FileJson } from 'lucide-react';
+import { Circle, Square, Play, Pause, Download, Upload, ChevronDown, Music, Activity, FileJson, Film } from 'lucide-react';
 
 interface RecorderControlsProps {
     isRecording: boolean;
@@ -25,6 +25,12 @@ interface RecorderControlsProps {
     onScrubEnd: () => void;
     onExport: (format?: 'full' | 'kinematics' | 'audio') => void;
     onImport: (file: File) => void;
+    /** Replaces the primary Export button (default: Full JSON). */
+    primaryExport?: { label: string; onSelect: () => void };
+    /** Extra entries listed first in the export menu. */
+    extraExports?: { id: string; label: string; hint: string; onSelect: () => void }[];
+    /** Disables every control (e.g. while a video export renders). */
+    busy?: boolean;
 }
 
 const fmt = (ms: number) => {
@@ -60,7 +66,10 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     onScrub,
     onScrubEnd,
     onExport,
-    onImport
+    onImport,
+    primaryExport,
+    extraExports,
+    busy = false
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showExportMenu, setShowExportMenu] = useState(false);
@@ -91,9 +100,9 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
             <div className="flex items-center justify-center gap-4 my-1">
                 {/* Record / Stop */}
                 {!isRecording ? (
-                    <button 
+                    <button
                         onClick={onRecord}
-                        disabled={isPlaying}
+                        disabled={isPlaying || busy}
                         className="w-11 h-11 rounded-full bg-white/5 hover:bg-[#EE3B2B]/20 border border-white/20 hover:border-[#EE3B2B] flex items-center justify-center group transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Start Recording (With Audio)"
                     >
@@ -112,7 +121,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 {/* Play / Pause */}
                 <button
                     onClick={onPlayToggle}
-                    disabled={!hasData || isRecording}
+                    disabled={!hasData || isRecording || busy}
                     className={`w-11 h-11 rounded-full border flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                         isPlaying && !isPaused
                         ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.4)]'
@@ -127,7 +136,8 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 {isPlaying && (
                     <button
                         onClick={onStopPlayback}
-                        className="w-11 h-11 rounded-full bg-white/5 hover:bg-white/15 border border-white/20 text-white flex items-center justify-center transition-all"
+                        disabled={busy}
+                        className="w-11 h-11 rounded-full bg-white/5 hover:bg-white/15 border border-white/20 text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Stop playback, back to live"
                     >
                         <Square fill="currentColor" size={14} />
@@ -143,7 +153,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     max={Math.max(1, durationMs)}
                     step={16}
                     defaultValue={0}
-                    disabled={!hasData || isRecording}
+                    disabled={!hasData || isRecording || busy}
                     onPointerDown={onScrubStart}
                     onChange={(e) => onScrub(parseFloat(e.target.value))}
                     onPointerUp={onScrubEnd}
@@ -158,17 +168,17 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
             <div className="relative flex gap-2 mt-1">
                 {/* Export Dropdown Group */}
                 <div className="flex-1 flex rounded-lg overflow-hidden border border-white/10 bg-white/5">
-                    <button 
-                        onClick={() => onExport('full')}
-                        disabled={!hasData}
+                    <button
+                        onClick={() => (primaryExport ? primaryExport.onSelect() : onExport('full'))}
+                        disabled={!hasData || busy}
                         className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 hover:bg-white/10 text-[11px] font-mono text-gray-200 transition-colors disabled:opacity-30"
                         title="Export Full Session Bundle (.json)"
                     >
-                        <Download size={13} /> Export
+                        <Download size={13} /> {primaryExport?.label ?? 'Export'}
                     </button>
-                    <button 
+                    <button
                         onClick={() => setShowExportMenu(!showExportMenu)}
-                        disabled={!hasData}
+                        disabled={!hasData || busy}
                         className="px-2 border-l border-white/10 hover:bg-white/10 text-gray-300 disabled:opacity-30"
                         title="Export Formats"
                     >
@@ -177,9 +187,10 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 </div>
 
                 {/* Import Button */}
-                <button 
+                <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-mono text-gray-200 border border-white/10 transition-colors"
+                    disabled={busy}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-mono text-gray-200 border border-white/10 transition-colors disabled:opacity-30"
                 >
                     <Upload size={13} /> Load JSON
                 </button>
@@ -200,6 +211,19 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                         <div className="px-2 py-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider border-b border-white/10">
                             Select Export Format
                         </div>
+                        {extraExports?.map((x) => (
+                            <button
+                                key={x.id}
+                                onClick={() => { x.onSelect(); setShowExportMenu(false); }}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200"
+                            >
+                                <Film size={13} className="text-[#EE3B2B]" />
+                                <div>
+                                    <div className="font-semibold text-white">{x.label}</div>
+                                    <div className="text-[9px] text-gray-400">{x.hint}</div>
+                                </div>
+                            </button>
+                        ))}
                         <button
                             onClick={() => { onExport('full'); setShowExportMenu(false); }}
                             className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200"
@@ -227,7 +251,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                             >
                                 <Music size={13} className="text-white" />
                                 <div>
-                                    <div className="font-semibold text-white">Audio Track (.webm)</div>
+                                    <div className="font-semibold text-white">Audio Track</div>
                                     <div className="text-[9px] text-gray-400">Clean microphone track</div>
                                 </div>
                             </button>
