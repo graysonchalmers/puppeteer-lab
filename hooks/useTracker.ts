@@ -3,28 +3,31 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * One camera grant, one rAF loop, one frame shape (TrackedFrame) for hand
- * tracking. Phase 2 only wires the hands-only path; Phase 3 adds face and
- * the combined hands+face path (TDD-001).
+ * and face tracking (TDD-001 Phases 2-3). Face landmarks run through a One
+ * Euro bank owned here; hands keep the slider-driven lerp.
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
-import { MEDIAPIPE_WASM_PATH, HAND_MODEL_PATH } from './mediapipeAssets';
+import { HandLandmarker, FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { MEDIAPIPE_WASM_PATH, HAND_MODEL_PATH, FACE_MODEL_PATH } from './mediapipeAssets';
 import { buildFrame } from '../components/shared/buildFrame';
 import { smoothingToLerp } from '../components/shared/smoothing';
+import { createOneEuroBank, faceSmoothingToMinCutoff } from '../components/shared/oneEuro';
+import { updateAvgDt, nextFaceAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
 
 export interface UseTrackerOptions {
-  hands?: boolean;      // default true
-  face?: boolean;       // default false (added Phase 3)
-  smoothing?: number;   // 0..1 UI amount, same scale as SmoothingControl
-  confidence?: number;  // handedness gate, default 0.5
+  hands?: boolean;         // default true
+  face?: boolean;          // default false
+  smoothing?: number;      // 0..1 UI amount for hands, same scale as SmoothingControl
+  confidence?: number;     // handedness gate, default 0.5
+  faceSmoothing?: number;  // 0..1 UI amount for the face One Euro filter, default 0.5
 }
 
 export function useTracker(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   options: UseTrackerOptions = {}
 ) {
-  const { hands = true } = options;
+  const { hands = true, face = false } = options;
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +35,7 @@ export function useTracker(
     smoothingAlpha: smoothingToLerp(options.smoothing ?? 0.6),
     confidence: options.confidence ?? 0.5,
   });
+  const faceFilterRef = useRef(createOneEuroBank());
 
   useEffect(() => {
     if (options.smoothing !== undefined) {
@@ -45,6 +49,10 @@ export function useTracker(
     }
   }, [options.confidence]);
 
+  useEffect(() => {
+    faceFilterRef.current.params.minCutoff = faceSmoothingToMinCutoff(options.faceSmoothing ?? 0.5);
+  }, [options.faceSmoothing]);
+
   const setSmoothing = useCallback((amount01: number) => {
     settingsRef.current.smoothingAlpha = smoothingToLerp(Math.max(0, Math.min(1, amount01)));
   }, []);
@@ -53,38 +61,62 @@ export function useTracker(
     settingsRef.current.confidence = threshold;
   }, []);
 
+  const setFaceSmoothing = useCallback((amount01: number) => {
+    faceFilterRef.current.params.minCutoff = faceSmoothingToMinCutoff(amount01);
+  }, []);
+
   const frameRef = useRef<TrackedFrame | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
+  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const requestRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!hands) return; // Phase 3 adds the face-only and combined paths here.
+    if (!hands && !face) return;
     let isActive = true;
+
+    const closeAll = () => {
+      handLandmarkerRef.current?.close();
+      faceLandmarkerRef.current?.close();
+      handLandmarkerRef.current = null;
+      faceLandmarkerRef.current = null;
+    };
 
     const setup = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
         if (!isActive) return;
 
-        const landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: HAND_MODEL_PATH, delegate: 'GPU' },
-          runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        });
-
-        if (!isActive) {
-          landmarker.close();
-          return;
+        if (hands) {
+          handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: HAND_MODEL_PATH, delegate: 'GPU' },
+            runningMode: 'VIDEO',
+            numHands: 2,
+            minHandDetectionConfidence: 0.5,
+            minHandPresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          });
+        }
+        if (face && isActive) {
+          faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: FACE_MODEL_PATH, delegate: 'GPU' },
+            outputFaceBlendshapes: true,
+            outputFacialTransformationMatrixes: true,
+            runningMode: 'VIDEO',
+            numFaces: 1,
+            minFaceDetectionConfidence: 0.5,
+            minFacePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          });
         }
 
-        handLandmarkerRef.current = landmarker;
+        if (!isActive) {
+          closeAll();
+          return;
+        }
         startCamera();
       } catch (err: any) {
         console.error('Error initializing MediaPipe:', err);
-        setError(`Failed to load hand tracking: ${err.message}`);
+        setError(`Failed to load ${face && !hands ? 'face' : 'hand'} tracking: ${err.message}`);
       }
     };
 
@@ -111,18 +143,36 @@ export function useTracker(
       }
     };
 
+    let tickIndex = 0;
+    let lastNow = 0;
+    let avgDt = 0;
+    let alternating = false;
+
     const tick = () => {
-      if (!videoRef.current || !handLandmarkerRef.current || !isActive) return;
+      if (!videoRef.current || !isActive) return;
+      const handLm = handLandmarkerRef.current;
+      const faceLm = faceLandmarkerRef.current;
 
       const video = videoRef.current;
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         const now = performance.now();
+        if (lastNow) avgDt = updateAvgDt(avgDt, now - lastNow);
+        lastNow = now;
+        alternating = nextFaceAlternating(alternating, avgDt, !!handLm && !!faceLm);
+        const runFace = !!faceLm && (!alternating || tickIndex % 2 === 0);
+        tickIndex++;
+
         try {
-          const handResult = handLandmarkerRef.current.detectForVideo(video, now);
-          frameRef.current = buildFrame(frameRef.current, handResult, null, now, {
+          const handResult = handLm ? handLm.detectForVideo(video, now) : null;
+          const faceResult = runFace ? faceLm!.detectForVideo(video, now) : null;
+          const prev = frameRef.current;
+          const next = buildFrame(prev, handResult, faceResult, now, {
             confidence: settingsRef.current.confidence,
             smoothingAlpha: settingsRef.current.smoothingAlpha,
+            faceFilter: faceFilterRef.current,
           });
+          if (faceLm && !runFace && prev) next.face = prev.face; // alternate tick: reuse
+          frameRef.current = next;
         } catch (e) {
           console.warn('Detection failed this frame', e);
         }
@@ -136,13 +186,13 @@ export function useTracker(
     return () => {
       isActive = false;
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      if (handLandmarkerRef.current) handLandmarkerRef.current.close();
+      closeAll();
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [videoRef, hands]);
+  }, [videoRef, hands, face]);
 
-  return { frameRef, isReady, error, setSmoothing, setConfidence };
+  return { frameRef, isReady, error, setSmoothing, setConfidence, setFaceSmoothing };
 }
