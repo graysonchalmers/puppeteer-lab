@@ -15,6 +15,8 @@ import {
     SerializeRequest,
     SerializeResponse,
 } from '../components/shared/recordingSchema';
+import { downloadBlob } from '../components/shared/download';
+import { extensionForMime } from '../components/face/exportPack';
 
 /** Runs one export through serialize.worker.ts and resolves with the Blob it
  * posts back. Constructed lazily (only when exportData actually runs, never
@@ -354,12 +356,65 @@ export const useRecorder = (type: TrackingType) => {
     }, [isPlaying]);
 
     // --- EXPORT / IMPORT ---
-    // Async since the 'full'/'kinematics' paths now try a Worker first
-    // (TDD-002 P2): callers (RecorderControls.tsx's onClick handlers) already
-    // just call this fire-and-forget, never `await` it, so the returned
-    // promise resolving after the fact is invisible to them - the download
-    // still lands the same way it always has, just not necessarily on the
-    // same tick.
+    const getFrames = useCallback((): FrameData[] => bufferRef.current, []);
+
+    /** The take's audio as a Blob: the live recording, or decoded from an imported file's data URL. */
+    const getAudio = useCallback((): { blob: Blob; mimeType: string } | null => {
+        if (audioBlobRef.current) {
+            return { blob: audioBlobRef.current, mimeType: audioBlobRef.current.type || 'audio/webm' };
+        }
+        const parsed = audioBase64Ref.current ? parseDataUrl(audioBase64Ref.current) : null;
+        if (!parsed) return null;
+        const bin = atob(parsed.base64);
+        const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        return { blob: new Blob([buf], { type: parsed.mimeType }), mimeType: parsed.mimeType };
+    }, []);
+
+    /** 'full' / 'kinematics' v3 JSON as a Blob (worker first, chunked main-thread fallback).
+     *
+     * Async since the 'full'/'kinematics' paths try a Worker first (TDD-002
+     * P2): callers (RecorderControls.tsx's onClick handlers) already just
+     * call exportData fire-and-forget, never `await` it, so the returned
+     * promise resolving after the fact is invisible to them - the download
+     * still lands the same way it always has, just not necessarily on the
+     * same tick.
+     *
+     * 'full' and 'kinematics', v3 shape (TDD-002 P1 shape, P2 dispatch): try
+     * the Worker first so a long take's buildEnvelope/buildKinematics +
+     * JSON.stringify runs off the main thread; fall back to the chunked
+     * main-thread path in recordingSchema.ts if Workers are unavailable or
+     * the worker fails to construct, load, or run.
+     *
+     * Audio plumbing (refs, state) is unchanged from v2: audioBase64Ref
+     * still holds a data URL. parseDataUrl is one cheap string split, so it
+     * stays synchronous here (not moved into the worker); only the
+     * already-parsed { mimeType, base64 } crosses into the worker/fallback,
+     * to be attached to the envelope before the one expensive serializeV3
+     * call (kinematics exports never carry audio, matching
+     * RecordingV3Kinematics having no audio field).
+     *
+     * Note: audioBase64Ref is only filled by a FileReader after recording
+     * stops, so buildRecordingBlob('full') called immediately after Stop
+     * could miss audio; that race exists today and is unchanged. getAudio
+     * does not have it (it prefers the live blob).
+     */
+    const buildRecordingBlob = useCallback(async (kind: 'full' | 'kinematics'): Promise<Blob> => {
+        const audio = kind === 'full' && audioBase64Ref.current ? (parseDataUrl(audioBase64Ref.current) ?? undefined) : undefined;
+        const request: SerializeRequest = { frames: bufferRef.current, type, kind, durationMs: lastTimestamp(), audio };
+        try {
+            return await runSerializeWorker(request);
+        } catch (err) {
+            console.warn('Worker export unavailable, falling back to chunked main-thread serialize:', err);
+            const json = await serializeV3Chunked(request.frames, request.type, request.kind, {
+                durationMs: request.durationMs,
+                video: request.video,
+                audio: request.audio,
+            });
+            return new Blob([json], { type: 'application/json' });
+        }
+    }, [type]);
+
     const exportData = useCallback(async (format: 'full' | 'kinematics' | 'audio' = 'full') => {
         if (bufferRef.current.length === 0 && format !== 'audio') {
             alert("No recording to export.");
@@ -369,73 +424,18 @@ export const useRecorder = (type: TrackingType) => {
         const dateStr = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
 
         if (format === 'audio') {
-            if (!audioBase64Ref.current && !audioBlobRef.current) {
+            const audio = getAudio();
+            if (!audio) {
                 alert("No audio track recorded in this session.");
                 return;
             }
-            // Download audio blob or base64
-            let audioBlob: Blob;
-            if (audioBlobRef.current) {
-                audioBlob = audioBlobRef.current;
-            } else {
-                const byteCharacters = atob(audioBase64Ref.current!.split(',')[1] || audioBase64Ref.current!);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                audioBlob = new Blob([new Uint8Array(byteNumbers)], { type: 'audio/webm' });
-            }
-
-            const url = URL.createObjectURL(audioBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${type.toLowerCase()}_audio_${dateStr}.webm`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadBlob(audio.blob, `${type.toLowerCase()}_audio_${dateStr}.${extensionForMime(audio.mimeType)}`);
             return;
         }
 
-        // 'full' and 'kinematics', v3 shape (TDD-002 P1 shape, P2 dispatch):
-        // try the Worker first so a long take's buildEnvelope/buildKinematics
-        // + JSON.stringify runs off the main thread; fall back to the
-        // chunked main-thread path in recordingSchema.ts if Workers are
-        // unavailable or the worker fails to construct, load, or run.
-        //
-        // Audio plumbing (refs, state) is unchanged from v2: audioBase64Ref
-        // still holds a data URL. parseDataUrl is one cheap string split, so
-        // it stays synchronous here (not moved into the worker); only the
-        // already-parsed { mimeType, base64 } crosses into the worker/
-        // fallback, to be attached to the envelope before the one expensive
-        // serializeV3 call (kinematics exports never carry audio, matching
-        // RecordingV3Kinematics having no audio field).
-        const kind = format; // 'full' | 'kinematics'
-        const audio = kind === 'full' && audioBase64Ref.current ? (parseDataUrl(audioBase64Ref.current) ?? undefined) : undefined;
-        const request: SerializeRequest = { frames: bufferRef.current, type, kind, durationMs: lastTimestamp(), audio };
-
-        let blob: Blob;
-        try {
-            blob = await runSerializeWorker(request);
-        } catch (err) {
-            console.warn('Worker export unavailable, falling back to chunked main-thread serialize:', err);
-            const json = await serializeV3Chunked(request.frames, request.type, request.kind, {
-                durationMs: request.durationMs,
-                video: request.video,
-                audio: request.audio,
-            });
-            blob = new Blob([json], { type: 'application/json' });
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${type.toLowerCase()}_${kind === 'kinematics' ? 'kinematics' : 'recording'}_${dateStr}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, [type]);
+        const blob = await buildRecordingBlob(format);
+        downloadBlob(blob, `${type.toLowerCase()}_${format === 'kinematics' ? 'kinematics' : 'recording'}_${dateStr}.json`);
+    }, [type, getAudio, buildRecordingBlob]);
 
     const loadData = useCallback((file: File) => {
         const reader = new FileReader();
@@ -530,6 +530,9 @@ export const useRecorder = (type: TrackingType) => {
         getPlaybackFrame,
         exportData,
         loadData,
+        getFrames,
+        getAudio,
+        buildRecordingBlob,
         hasData: frameCount > 0
     };
 };
