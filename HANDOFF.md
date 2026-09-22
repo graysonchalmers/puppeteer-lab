@@ -10,7 +10,7 @@ Everything committed, pushed, and deployed; tree clean. Waiting on Grayson's rea
 
 ## ▶️ Next concrete step
 **Host-verify Face Puppet on the live site (real Chrome, camera + mic):**
-0. **Teeth + brows (2026-09-22 follow-up, local only, not deployed):** raise ONE brow; if the other puppet brow moves, flip `BROW_SIDES_SWAPPED` (`components/face/puppetState.ts`). Lips parted with teeth together shows a white bite block; dropping the jaw shows two rows with a dark gap (tune `TEETH_APART_ABOVE` / `TEETH_TOGETHER_BELOW` on `jawOpen`). Tune the Brow Boost slider default (0.5) and `BROW_BOOST_MAX`. Head is trimmed to 191 verts / 298 tris.
+0. **Teeth + brows (2026-09-22 follow-up, deployed to mocap at `e43cbfa`, stamp `🐫 AROUND · e43cbf`):** raise ONE brow; if the other puppet brow moves, flip `BROW_SIDES_SWAPPED` (`components/face/puppetState.ts`). Lips parted with teeth together shows a white bite block; dropping the jaw shows two rows with a dark gap (tune `TEETH_APART_ABOVE` / `TEETH_TOGETHER_BELOW` on `jawOpen`). Tune the Brow Boost slider default (0.5) and `BROW_BOOST_MAX`. Head is trimmed to 191 verts / 298 tris.
 1. Mouth: no flicker at the open/close boundary; closed shows a seam. Retune `MOUTH_OPEN_ABOVE` / `MOUTH_CLOSE_BELOW` (`components/face/mouthState.ts`) if needed.
 2. Face Smoothing slider: LIGHT jitters a little, HEAVY lags a little, default feels calm.
 3. Face + hands loop holds 30 fps or better; hands keep moving when a hand covers the face.
