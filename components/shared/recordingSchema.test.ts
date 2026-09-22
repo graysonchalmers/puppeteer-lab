@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Vector3 } from 'three';
-import { buildEnvelope, buildKinematics, serializeV3, serializeV3Chunked, migrateV2, parseDataUrl, toDataUrl, detectTrackingType } from './recordingSchema';
+import { buildEnvelope, buildKinematics, serializeV3, serializeV3Chunked, migrateV2, parseDataUrl, toDataUrl, detectTrackingType, channelsFor } from './recordingSchema';
 import { FrameData } from '../../types';
 
 // --- fixtures ---
@@ -308,6 +308,31 @@ describe('detectTrackingType', () => {
   it('returns undefined for an unrecognized shape', () => {
     expect(detectTrackingType({})).toBeUndefined();
     expect(detectTrackingType(null)).toBeUndefined();
+  });
+});
+
+describe('channelsFor', () => {
+  const faceFrame = { timestamp: 0, faceLandmarks: [{ x: 0.5, y: 0.5, z: 0 }], blendshapes: {} };
+  const hand21 = Array.from({ length: 21 }, (_, i) => ({ x: 0.1 + i * 0.01, y: 0.5, z: 0 }));
+
+  it('HAND takes stay hands', () => {
+    expect(channelsFor([{ timestamp: 0 }], 'HAND')).toEqual(['hands']);
+  });
+  it('FACE takes without hands stay face-only', () => {
+    expect(channelsFor([faceFrame], 'FACE')).toEqual(['face']);
+  });
+  it('FACE takes with hands in any frame carry both', () => {
+    expect(channelsFor([faceFrame, { ...faceFrame, timestamp: 33, landmarks: [hand21] }], 'FACE')).toEqual(['face', 'hands']);
+  });
+  it('a face+hands take round-trips through v3 with its hand', () => {
+    const frames = [{ ...faceFrame, landmarks: [hand21] }];
+    const json = JSON.parse(serializeV3(buildEnvelope(frames, 'FACE', { durationMs: 0 })));
+    expect(json.channels).toEqual(['face', 'hands']);
+    expect(detectTrackingType(json)).toBe('FACE');
+    const back = migrateV2(json);
+    expect(back[0].landmarks).toHaveLength(1);
+    expect(back[0].landmarks![0]).toHaveLength(21);
+    expect(back[0].faceLandmarks).toHaveLength(1);
   });
 });
 

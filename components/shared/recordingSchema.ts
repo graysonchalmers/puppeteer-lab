@@ -18,6 +18,7 @@ import {
     FrameData,
     TrackingType,
     RecordingV3,
+    RecordingV3Channel,
     RecordingV3Kinematics,
     RecordingV3Frame,
     RecordingV3KinematicsFrame,
@@ -145,6 +146,13 @@ const mapFrameFace = (frame: FrameData): RecordingV3Face | null => {
     };
 };
 
+/** Which channels a take carries. A Face Puppet take gains 'hands' once any
+ * frame recorded a hand (FrameData.landmarks), so importers know to look. */
+export function channelsFor(frames: FrameData[], type: TrackingType): RecordingV3Channel[] {
+    if (type !== 'FACE') return ['hands'];
+    return frames.some((f) => f.landmarks && f.landmarks.length > 0) ? ['face', 'hands'] : ['face'];
+}
+
 export function buildEnvelope(
     frames: FrameData[],
     type: TrackingType,
@@ -168,7 +176,7 @@ export function buildEnvelope(
             video: opts.video,
         },
         world: WORLD_META,
-        channels: type === 'FACE' ? ['face'] : ['hands'],
+        channels: channelsFor(frames, type),
         frames: v3Frames,
         audio: null,
     };
@@ -196,7 +204,7 @@ export function buildKinematics(frames: FrameData[], type: TrackingType, duratio
             frameCount: frames.length,
         },
         world: WORLD_META,
-        channels: type === 'FACE' ? ['face'] : ['hands'],
+        channels: channelsFor(frames, type),
         frames: v3Frames,
     };
 }
@@ -255,7 +263,7 @@ const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeou
  * already-built (small, compact) envelope object rather than doing the whole
  * frames->envelope->JSON.stringify pipeline synchronously. */
 export async function serializeV3Chunked(frames: FrameData[], type: TrackingType, kind: SerializeKind, opts: SerializeOpts): Promise<string> {
-    const channels = type === 'FACE' ? (['face'] as const) : (['hands'] as const);
+    const channels = channelsFor(frames, type);
     const source = { app: 'puppeteer-lab', commit: buildStamp() };
 
     if (kind === 'kinematics') {
