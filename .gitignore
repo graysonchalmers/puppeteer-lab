@@ -28,3 +28,6 @@ public/mediapipe/wasm/
 
 # Generated at build time by scripts/build-stamp.mjs (portfolio SOP)
 build-stamp.json
+
+# Synthetic takes for camera-less screenshots (regenerate: node tools/make-synthetic-take.mjs [--hands])
+tools/fixtures/
