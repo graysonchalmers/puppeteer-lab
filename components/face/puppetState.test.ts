@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { Landmark } from '../shared/trackerTypes';
 import {
   INITIAL_PUPPET_STATE, stepPuppetState, browLift, boostBrows, BROW_BOOST_MAX,
-  TEETH_APART_ABOVE, TEETH_TOGETHER_BELOW,
+  TEETH_APART_ABOVE, TEETH_TOGETHER_BELOW, BROW_DOWN_SCALE,
 } from './puppetState';
 import { LEFT_EYEBROW, RIGHT_EYEBROW, LEFT_EYE_CONTOUR } from './faceTopology';
 
@@ -92,8 +92,16 @@ describe('boostBrows', () => {
     const out = boostBrows(lm, [1, -1], 0.5, 1);
     const d = 0.6 * 0.5 * BROW_BOOST_MAX; // face height 0.6
     expect(out[LEFT_EYEBROW[0]].y).toBeCloseTo(0.5 - d);
-    expect(out[RIGHT_EYEBROW[0]].y).toBeCloseTo(0.5 + d);
+    expect(out[RIGHT_EYEBROW[0]].y).toBeCloseTo(0.5 + d * BROW_DOWN_SCALE);
     for (const i of LEFT_EYE_CONTOUR) expect(out[i]).toBe(lm[i]);
+  });
+
+  it('moves brows down less than up, so a frown never crosses the eye', () => {
+    const lm = face();
+    const up = 0.5 - boostBrows(lm, [1, 1], 1, 1)[LEFT_EYEBROW[0]].y;
+    const down = boostBrows(lm, [-1, -1], 1, 1)[LEFT_EYEBROW[0]].y - 0.5;
+    expect(down).toBeLessThan(up);
+    expect(down / 0.6).toBeLessThan(0.07); // under the canonical brow-to-lid gap
   });
 
   it('follows the face axis when the head rolls, with x corrected for aspect', () => {

@@ -76,6 +76,9 @@ const TOP = 10;
 
 /** Full lift at amount 1 moves a brow this share of the face height. */
 export const BROW_BOOST_MAX = 0.12;
+/** Downward travel is scaled by this: the canonical brow-to-lid gap is only
+ * 0.07-0.09 face heights, so a full frown at full boost would cross the eye. */
+export const BROW_DOWN_SCALE = 0.4;
 
 /**
  * Copy of `lm` with each brow moved by brows[side] * amount * BROW_BOOST_MAX
@@ -93,7 +96,7 @@ export function boostBrows(lm: Landmark[], brows: readonly [number, number], amo
   const move = (i: number, lift: number) => {
     const p = lm[i];
     if (!p) return;
-    const d = lift * amount * BROW_BOOST_MAX; // share of face height; unit vector * faceH cancels
+    const d = (lift < 0 ? lift * BROW_DOWN_SCALE : lift) * amount * BROW_BOOST_MAX; // share of face height
     out[i] = { ...p, x: p.x + (ux * d) / videoAspect, y: p.y + uy * d };
   };
   [LEFT_EYEBROW, RIGHT_EYEBROW].forEach((brow, s) => {
