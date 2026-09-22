@@ -149,6 +149,9 @@ export interface RecordingV3Frame {
 export interface RecordingV3Audio {
     mimeType: string;
     base64: string; // payload only, no "data:...;base64," prefix
+    /** ms from frame time 0 (startRecording) to the audio's own time 0 (the
+     * mic MediaRecorder's onstart). Optional/additive; absent = 0. */
+    offsetMs?: number;
 }
 
 export interface RecordingV3 {

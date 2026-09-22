@@ -5,7 +5,8 @@
  * Replays a take into an offscreen canvas in real time and records it with
  * MediaRecorder: canvas.captureStream(30) for video plus the take's audio
  * routed through Web Audio into the same stream (not to the speakers). The
- * audio element is the master clock, so lips and voice stay in sync. Takes
+ * audio element is the master clock (shifted by the take's audio offsetMs:
+ * the mic starts a beat after frame 0), so lips and voice stay in sync. Takes
  * as long as the take; rAF pauses in a hidden tab, which stalls (not fails)
  * the export.
  *
@@ -21,7 +22,9 @@ import { pickVideoMime } from './exportPack';
 export interface RenderTakeOptions {
   frames: FrameData[];
   durationMs: number;
-  audio: { blob: Blob; mimeType: string } | null;
+  /** offsetMs: frame time at which the audio's own time 0 falls (v3
+   * audio.offsetMs, default 0); the audio clock is shifted by it. */
+  audio: { blob: Blob; mimeType: string; offsetMs?: number } | null;
   width: number;
   height: number;
   draw: (ctx: CanvasRenderingContext2D, frame: FrameData, w: number, h: number) => void;
@@ -71,6 +74,7 @@ export async function renderTakeToVideo(o: RenderTakeOptions): Promise<{ blob: B
   let stopped: Promise<Blob> | null = null;
   let didStart = false;
   const chunks: Blob[] = [];
+  const audioOffsetMs = o.audio?.offsetMs ?? 0;
 
   // Resolves on Cancel, so a recorder whose onstart never fires can't pin
   // the export (and every control it disables) forever.
@@ -136,7 +140,7 @@ export async function renderTakeToVideo(o: RenderTakeOptions): Promise<{ blob: B
           const tick = () => {
             if (o.signal.aborted) return resolve();
             try {
-              const clock = audioEl ? audioEl.currentTime * 1000 : performance.now() - t0;
+              const clock = audioEl ? audioEl.currentTime * 1000 + audioOffsetMs : performance.now() - t0;
               o.draw(ctx, o.frames[findFrameIndex(o.frames, clock)], o.width, o.height);
               o.onProgress?.(Math.min(clock, o.durationMs));
               if (clock >= o.durationMs || audioEl?.ended) return resolve();

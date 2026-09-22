@@ -55,6 +55,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const exportAbortRef = useRef<AbortController | null>(null);
   const exportFrameRef = useRef<FrameData | null>(null);
 
+  /** The take's saved camera aspect, else the current camera's. */
+  const takeAspect = () => {
+      const size = recorder.getVideoSize();
+      return size ? size.width / size.height : videoAspectRef.current;
+  };
+
   useEffect(() => {
       let animationFrameId: number;
       const ctx = canvasRef.current?.getContext('2d');
@@ -100,7 +106,11 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               }
               // Else, read from Live MediaPipe
               else if (isCameraReady && video && video.readyState >= 2) {
-                  if (video.videoWidth > 0) videoAspectRef.current = video.videoWidth / video.videoHeight;
+                  if (video.videoWidth > 0) {
+                      videoAspectRef.current = video.videoWidth / video.videoHeight;
+                      // Saved with the take (v3 capture.video) so playback/export use its aspect.
+                      if (recorder.isRecording) recorder.setVideoSize(video.videoWidth, video.videoHeight);
+                  }
                   // Hands are captured even when the face drops (a hand over the face).
                   const cap = frameToCapture(frameRef.current);
                   currentHands = cap?.landmarks ?? [];
@@ -127,10 +137,14 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   }
               }
 
+              // A recorded take uses its own camera aspect (imports included);
+              // live view uses the live camera's.
+              const aspect = exportFrameRef.current || recorder.isPlaying ? takeAspect() : videoAspectRef.current;
+
               if (currentLandmarks) {
                   mouthOpenRef.current = nextMouthOpen(
                       mouthOpenRef.current,
-                      mouthOpenRatio(currentLandmarks, videoAspectRef.current)
+                      mouthOpenRatio(currentLandmarks, aspect)
                   );
               }
 
@@ -138,7 +152,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, mouthOpen: mouthOpenRef.current }, w, h, {
                   showGazeRays,
                   showMocapDots,
-                  videoAspect: videoAspectRef.current,
+                  videoAspect: aspect,
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -181,6 +195,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
       let mouthOpen = false;
       let lastProgress = 0;
+      const aspect = takeAspect(); // fixed for the whole export
       try {
           const audio = recorder.getAudio();
           const video = await renderTakeToVideo({
@@ -193,8 +208,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               draw: (ctx, frame, w, h) => {
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
-                  if (face) mouthOpen = nextMouthOpen(mouthOpen, mouthOpenRatio(face, videoAspectRef.current));
-                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: videoAspectRef.current });
+                  if (face) mouthOpen = nextMouthOpen(mouthOpen, mouthOpenRatio(face, aspect));
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect });
               },
               onProgress: (ms) => {
                   const now = performance.now();

@@ -10,7 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Vector3 } from 'three';
 import { buildEnvelope, buildKinematics, serializeV3, serializeV3Chunked, migrateV2, parseDataUrl, toDataUrl, detectTrackingType, channelsFor } from './recordingSchema';
-import { FrameData } from '../../types';
+import { FrameData, RecordingV3Audio } from '../../types';
 
 // --- fixtures ---
 
@@ -333,6 +333,38 @@ describe('channelsFor', () => {
     expect(back[0].landmarks).toHaveLength(1);
     expect(back[0].landmarks![0]).toHaveLength(21);
     expect(back[0].faceLandmarks).toHaveLength(1);
+  });
+});
+
+describe('audio.offsetMs and capture.video (export lip-sync and aspect)', () => {
+  const frames: FrameData[] = [{ timestamp: 0, faceLandmarks: [{ x: 0.5, y: 0.5, z: 0 }], blendshapes: {} }];
+  const audio: RecordingV3Audio = { mimeType: 'audio/webm', base64: 'AAECAw==', offsetMs: 137.5 };
+
+  it('offsetMs survives buildEnvelope -> serializeV3 -> parse', () => {
+    const env = buildEnvelope(frames, 'FACE', { durationMs: 0 });
+    env.audio = audio;
+    const json = JSON.parse(serializeV3(env));
+    expect(json.audio.offsetMs).toBe(137.5);
+  });
+
+  it('offsetMs survives the chunked fallback path too (worker and fallback agree)', async () => {
+    const json = JSON.parse(await serializeV3Chunked(frames, 'FACE', 'full', { durationMs: 0, audio }));
+    expect(json.audio.offsetMs).toBe(137.5);
+  });
+
+  it('an audio block without offsetMs stays without it', async () => {
+    const plain: RecordingV3Audio = { mimeType: 'audio/webm', base64: 'AAECAw==' };
+    const json = JSON.parse(await serializeV3Chunked(frames, 'FACE', 'full', { durationMs: 0, audio: plain }));
+    expect(json.audio).not.toHaveProperty('offsetMs');
+    expect(json.audio.offsetMs).toBeUndefined();
+  });
+
+  it('capture.video round-trips through both serialize paths', async () => {
+    const video = { width: 1280, height: 720 };
+    const sync = JSON.parse(serializeV3(buildEnvelope(frames, 'FACE', { durationMs: 0, video })));
+    const chunked = JSON.parse(await serializeV3Chunked(frames, 'FACE', 'full', { durationMs: 0, video }));
+    expect(sync.capture.video).toEqual(video);
+    expect(chunked.capture.video).toEqual(video);
   });
 });
 

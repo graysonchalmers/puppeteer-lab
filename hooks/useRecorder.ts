@@ -108,6 +108,13 @@ export const useRecorder = (type: TrackingType) => {
     const audioBase64Ref = useRef<string | null>(null);
     const audioBlobRef = useRef<Blob | null>(null);
     const audioElementRef = useRef<HTMLAudioElement | null>(null);
+    // ms from frame time 0 (startRecording) to the mic recorder's actual start
+    // (after getUserMedia resolves). Saved as v3 audio.offsetMs; the video
+    // export uses it for lip-sync. In-app playback does not (out of scope).
+    const audioStartOffsetMsRef = useRef(0);
+    // Camera frame size for this take (v3 capture.video): set live by the demo
+    // while recording, or from a loaded file. null when unknown.
+    const videoSizeRef = useRef<{ width: number; height: number } | null>(null);
 
     const lastTimestamp = () => {
         const b = bufferRef.current;
@@ -140,6 +147,9 @@ export const useRecorder = (type: TrackingType) => {
         setIsPaused(false);
         setIsRecording(true);
         startTimeRef.current = performance.now();
+        audioStartOffsetMsRef.current = 0;
+        // videoSizeRef is deliberately NOT cleared: a size set just before
+        // startRecording belongs to this take.
 
         // Audio initialization
         audioChunksRef.current = [];
@@ -199,6 +209,10 @@ export const useRecorder = (type: TrackingType) => {
                                 };
                                 reader.readAsDataURL(audioBlob);
                             }
+                        };
+
+                        recorder.onstart = () => {
+                            audioStartOffsetMsRef.current = performance.now() - startTimeRef.current;
                         };
 
                         recorder.start(100);
@@ -358,16 +372,17 @@ export const useRecorder = (type: TrackingType) => {
     const getFrames = useCallback((): FrameData[] => bufferRef.current, []);
 
     /** The take's audio as a Blob: the live recording, or decoded from an imported file's data URL. */
-    const getAudio = useCallback((): { blob: Blob; mimeType: string } | null => {
+    const getAudio = useCallback((): { blob: Blob; mimeType: string; offsetMs: number } | null => {
+        const offsetMs = audioStartOffsetMsRef.current;
         if (audioBlobRef.current) {
-            return { blob: audioBlobRef.current, mimeType: audioBlobRef.current.type || 'audio/webm' };
+            return { blob: audioBlobRef.current, mimeType: audioBlobRef.current.type || 'audio/webm', offsetMs };
         }
         const parsed = audioBase64Ref.current ? parseDataUrl(audioBase64Ref.current) : null;
         if (!parsed) return null;
         const bin = atob(parsed.base64);
         const buf = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-        return { blob: new Blob([buf], { type: parsed.mimeType }), mimeType: parsed.mimeType };
+        return { blob: new Blob([buf], { type: parsed.mimeType }), mimeType: parsed.mimeType, offsetMs };
     }, []);
 
     /** 'full' / 'kinematics' v3 JSON as a Blob (worker first, chunked main-thread fallback).
@@ -399,8 +414,12 @@ export const useRecorder = (type: TrackingType) => {
      * does not have it (it prefers the live blob).
      */
     const buildRecordingBlob = useCallback(async (kind: 'full' | 'kinematics'): Promise<Blob> => {
-        const audio = kind === 'full' && audioBase64Ref.current ? (parseDataUrl(audioBase64Ref.current) ?? undefined) : undefined;
-        const request: SerializeRequest = { frames: bufferRef.current, type, kind, durationMs: lastTimestamp(), audio };
+        const parsed = kind === 'full' && audioBase64Ref.current ? parseDataUrl(audioBase64Ref.current) : null;
+        // offsetMs rides inside the audio block, so the worker and the chunked
+        // fallback (which both attach `audio` whole) agree without extra plumbing.
+        const audio = parsed ? { ...parsed, offsetMs: audioStartOffsetMsRef.current } : undefined;
+        const video = videoSizeRef.current ?? undefined;
+        const request: SerializeRequest = { frames: bufferRef.current, type, kind, durationMs: lastTimestamp(), video, audio };
         try {
             return await runSerializeWorker(request);
         } catch (err) {
@@ -413,6 +432,16 @@ export const useRecorder = (type: TrackingType) => {
             return new Blob([json], { type: 'application/json' });
         }
     }, [type]);
+
+    /** Camera frame size for the take (v3 capture.video). Stable identity. */
+    const setVideoSize = useCallback((width: number, height: number) => {
+        if (!(width > 0 && height > 0)) return;
+        const cur = videoSizeRef.current;
+        if (cur && cur.width === width && cur.height === height) return;
+        videoSizeRef.current = { width, height };
+    }, []);
+
+    const getVideoSize = useCallback((): { width: number; height: number } | null => videoSizeRef.current, []);
 
     const exportData = useCallback(async (format: 'full' | 'kinematics' | 'audio' = 'full') => {
         if (bufferRef.current.length === 0 && format !== 'audio') {
@@ -467,7 +496,16 @@ export const useRecorder = (type: TrackingType) => {
                 // Load synchronized audio if present. v3 files carry it as
                 // audio: { mimeType, base64 }; v2 files carry a top-level
                 // audioBase64 data URL directly.
-                const v3Audio = (json as any).audio as { mimeType: string; base64: string } | null | undefined;
+                const v3Audio = (json as any).audio as { mimeType: string; base64: string; offsetMs?: unknown } | null | undefined;
+                const offset = v3Audio?.offsetMs;
+                audioStartOffsetMsRef.current = typeof offset === 'number' && Number.isFinite(offset) ? offset : 0;
+
+                // v3 capture.video (camera aspect for playback/export); null when absent.
+                const vid = (json as any).capture?.video;
+                videoSizeRef.current =
+                    vid && typeof vid.width === 'number' && typeof vid.height === 'number' && vid.width > 0 && vid.height > 0
+                        ? { width: vid.width, height: vid.height }
+                        : null;
                 const audioDataUrl = v3Audio ? toDataUrl(v3Audio.mimeType, v3Audio.base64) : (json as any).audioBase64;
 
                 // A loaded session has no live Blob, so clear audioBlobRef and let
@@ -532,6 +570,8 @@ export const useRecorder = (type: TrackingType) => {
         getFrames,
         getAudio,
         buildRecordingBlob,
+        setVideoSize,
+        getVideoSize,
         hasData: frameCount > 0
     };
 };
