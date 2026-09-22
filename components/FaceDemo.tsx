@@ -10,7 +10,8 @@ import { useTracker } from '../hooks/useTracker';
 import { mouthOpenRatio, nextMouthOpen } from './face/mouthState';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
-import { drawFacePuppet } from './face/FaceMeshRenderer';
+import { drawPuppet } from './face/FaceMeshRenderer';
+import { Landmark } from './shared/trackerTypes';
 
 interface FaceDemoProps {
   onBack: () => void;
@@ -42,8 +43,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const [blendshapes, setBlendshapes] = useState<Record<string, number>>({});
   const lastBlendMsRef = useRef(0);
   const [showPip, setShowPip] = useState<boolean>(true);
-  const [showGazeRays, setShowGazeRays] = useState<boolean>(true);
-  const [showMocapDots, setShowMocapDots] = useState<boolean>(true);
+  const [showGazeRays, setShowGazeRays] = useState<boolean>(false);
+  const [showMocapDots, setShowMocapDots] = useState<boolean>(false);
 
   useEffect(() => {
       let animationFrameId: number;
@@ -69,12 +70,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               const w = canvas.width;
               const h = canvas.height;
 
-              // Clear to technical dark carbon
-              ctx.fillStyle = '#090A0C';
-              ctx.fillRect(0, 0, w, h);
-
               // Determine Data Source
-              let currentLandmarks: any[] | undefined;
+              let currentLandmarks: Landmark[] | undefined;
               let currentBlendshapesRecord: Record<string, number> = {};
 
               // If Playing, read from buffer
@@ -125,19 +122,16 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               }
 
               // Render Stylized Puppet Character
-              if (currentLandmarks) {
-                  drawFacePuppet(ctx, currentLandmarks, currentBlendshapesRecord, w, h, {
-                      showGazeRays,
-                      showMocapDots,
-                      showWireframeMesh: true,
-                      mouthOpen: mouthOpenRef.current
-                  });
-              } else {
-                  // Waiting placeholder
+              drawPuppet(ctx, { face: currentLandmarks ?? null, mouthOpen: mouthOpenRef.current }, w, h, {
+                  showGazeRays,
+                  showMocapDots,
+                  videoAspect: videoAspectRef.current,
+              });
+              if (!currentLandmarks) {
                   ctx.fillStyle = '#4B5563';
                   ctx.font = '12px monospace';
                   ctx.textAlign = 'center';
-                  ctx.fillText('AWAITING FACIAL TELEMETRY FEED...', w / 2, h / 2);
+                  ctx.fillText('WAITING FOR A FACE...', w / 2, h / 2);
               }
 
               // Update React UI state
