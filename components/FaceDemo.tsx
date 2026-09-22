@@ -6,7 +6,8 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2 } from 'lucide-react';
-import { useFaceTracker } from '../hooks/useFaceTracker';
+import { useTracker } from '../hooks/useTracker';
+import { mouthOpenRatio, nextMouthOpen } from './face/mouthState';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
 import { drawFacePuppet } from './face/FaceMeshRenderer';
@@ -30,8 +31,11 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isCameraReady, faceResultRef, error } = useFaceTracker(videoRef);
-  
+  const [faceSmoothing, setFaceSmoothing] = useState(0.5);
+  const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: false, face: true, faceSmoothing });
+  const mouthOpenRef = useRef(false);
+  const videoAspectRef = useRef(4 / 3);
+
   // Recorder Hook
   const recorder = useRecorder('FACE');
 
@@ -83,17 +87,13 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               } 
               // Else, read from Live MediaPipe
               else if (isCameraReady && video && video.readyState >= 2) {
-                  const result = faceResultRef.current;
-                  if (result && result.faceLandmarks && result.faceLandmarks.length > 0) {
-                      currentLandmarks = result.faceLandmarks[0];
+                  if (video.videoWidth > 0) videoAspectRef.current = video.videoWidth / video.videoHeight;
+                  const face = frameRef.current?.face;
+                  if (face) {
+                      currentLandmarks = face.landmarks;
+                      currentBlendshapesRecord = face.blendshapes;
 
-                      if (result.faceBlendshapes && result.faceBlendshapes[0]) {
-                          result.faceBlendshapes[0].categories.forEach(c => {
-                              currentBlendshapesRecord[c.categoryName] = c.score;
-                          });
-                      }
-
-                      // RECORDING LOGIC
+                      // RECORDING LOGIC (filtered landmarks, see recordingSchema capture notes)
                       if (recorder.isRecording) {
                           recorder.captureFrame({
                               faceLandmarks: currentLandmarks,
@@ -117,12 +117,20 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   }
               }
 
+              if (currentLandmarks) {
+                  mouthOpenRef.current = nextMouthOpen(
+                      mouthOpenRef.current,
+                      mouthOpenRatio(currentLandmarks, videoAspectRef.current)
+                  );
+              }
+
               // Render Stylized Puppet Character
               if (currentLandmarks) {
                   drawFacePuppet(ctx, currentLandmarks, currentBlendshapesRecord, w, h, {
                       showGazeRays,
                       showMocapDots,
-                      showWireframeMesh: true
+                      showWireframeMesh: true,
+                      mouthOpen: mouthOpenRef.current
                   });
               } else {
                   // Waiting placeholder
@@ -251,6 +259,27 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
           <div className="space-y-4">
              <div className="bg-[#15171C] p-3 rounded border border-white/10 text-[10px] text-gray-400 leading-relaxed">
                  Real-time facial blendshapes driving character puppet geometry, eye gaze, and speech synchronization.
+             </div>
+
+             {/* Face Smoothing (One Euro minCutoff) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between text-[11px] text-gray-300 mb-1.5">
+                     <span className="text-gray-400">Face Smoothing</span>
+                     <span className="text-white font-bold tabular-nums">{Math.round(faceSmoothing * 100)}%</span>
+                 </div>
+                 <input
+                     type="range"
+                     min={0}
+                     max={1}
+                     step={0.05}
+                     value={faceSmoothing}
+                     onChange={(e) => setFaceSmoothing(parseFloat(e.target.value))}
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     title="Left: responsive, a little jitter. Right: calm, a little lag."
+                 />
+                 <div className="flex justify-between text-[9px] text-gray-500 mt-1">
+                     <span>LIGHT</span><span>HEAVY</span>
+                 </div>
              </div>
 
              {/* Blendshape Bars */}

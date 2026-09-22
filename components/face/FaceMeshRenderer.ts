@@ -37,6 +37,7 @@ export interface FacePuppetOptions {
   showGazeRays?: boolean;
   showMocapDots?: boolean;
   showWireframeMesh?: boolean;
+  mouthOpen?: boolean;
 }
 
 /**
@@ -269,7 +270,7 @@ export const drawFacePuppet = (
   }
   ctx.closePath();
 
-  if (mouthOpenDist > 4) {
+  if (options.mouthOpen ?? mouthOpenDist > 4) {
     // Speaking / Open cavity
     ctx.fillStyle = '#111317';
     ctx.fill();
