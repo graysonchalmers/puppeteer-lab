@@ -71,7 +71,7 @@ for (let f = 0; f < FPS * SECONDS; f++) {
   const frame = { timestamp: Math.round(t * 1000), faceLandmarks: pts, blendshapes: { jawOpen: r4(open) } };
   if (withHands) {
     const wave = Math.sin(t * Math.PI * 2) * 0.35;
-    frame.landmarks = [hand(0.2, 0.95, 0.09, wave), hand(0.8, 0.95, 0.09, -wave)];
+    frame.landmarks = [hand(0.22, 0.78, 0.1, wave), hand(0.78, 0.78, 0.1, -wave)];
   }
   frames.push(frame);
 }
