@@ -65,6 +65,17 @@ describe('stepPuppetState', () => {
   });
 });
 
+describe('brow sides (verified on camera 2026-09-22)', () => {
+  it('browOuterUpLeft drives LEFT_EYEBROW, browOuterUpRight drives RIGHT_EYEBROW', () => {
+    const l = stepPuppetState(INITIAL_PUPPET_STATE, face(), { browOuterUpLeft: 1 }, 1);
+    expect(l.brows[0]).toBeGreaterThan(0);
+    expect(l.brows[1]).toBe(0);
+    const r = stepPuppetState(INITIAL_PUPPET_STATE, face(), { browOuterUpRight: 1 }, 1);
+    expect(r.brows[1]).toBeGreaterThan(0);
+    expect(r.brows[0]).toBe(0);
+  });
+});
+
 describe('browLift', () => {
   it('is up minus down, clamped', () => {
     expect(browLift({ browDownLeft: 1 }, 'Left')).toBe(-1);

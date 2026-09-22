@@ -29,10 +29,11 @@ export const TEETH_APART_RATIO_ABOVE = 0.2;
 export const TEETH_TOGETHER_RATIO_BELOW = 0.14;
 const BROW_ALPHA = 0.35; // EMA per frame; blendshapes arrive unfiltered
 
-/** LEFT_EYEBROW (70..46) sits over the 33..133 eye, the subject's right, and
- * ARKit-style blendshape names are subject-relative. Flip this if raising one
- * brow on camera lifts the other puppet brow. UNVERIFIED on a real face. */
-export const BROW_SIDES_SWAPPED = false;
+/** LEFT_EYEBROW (70..46) sits over the 33..133 eye, the subject's right, but
+ * MediaPipe's brow blendshapes name sides by image position, not the subject:
+ * verified on a real face 2026-09-22 (raising one brow lifted the other puppet
+ * brow until this was flipped). */
+export const BROW_SIDES_SWAPPED = true;
 
 type Blend = Record<string, number> | undefined;
 
