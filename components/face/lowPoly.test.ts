@@ -3,8 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fitProjection, lambert, shadeColor, buildFaceTriangles, triIntensity } from './lowPoly';
 import { FACE_TRIS } from './faceTopology';
+
+// Load canonical face vertices from .obj file
+const objPath = resolve(fileURLToPath(import.meta.url), '../../../tools/data/canonical_face_model.obj');
+const objLines = readFileSync(objPath, 'utf-8').split('\n');
+const vertices: [number, number, number][] = [];
+for (const line of objLines) {
+  if (line.startsWith('v ')) {
+    const parts = line.split(/\s+/).slice(1, 4);
+    const [x, y, z] = parts.map(Number);
+    vertices.push([x, y, z]);
+  }
+}
 
 describe('fitProjection', () => {
   it('contain-fits a 4:3 camera into a wide stage, centered and mirrored', () => {
@@ -62,12 +77,20 @@ describe('shadeColor', () => {
 });
 
 describe('buildFaceTriangles', () => {
-  // Deterministic scatter so no triangle is degenerate.
-  const flat = Array.from({ length: 478 }, (_, i) => ({
-    x: 0.3 + ((i * 7919) % 400) / 1000,
-    y: 0.2 + ((i * 104729) % 500) / 1000,
-    z: 0,
-  }));
+  // Canonical face flattened: map 3D vertices to 2D plane at z=0, normalized to 0..1 range
+  const flat = [
+    ...vertices.map((v) => ({
+      x: 0.5 + v[0] * 0.02,
+      y: 0.5 - v[1] * 0.02,
+      z: 0,
+    })),
+    // Append 10 copies of vertex 0 to reach 478 entries
+    ...Array.from({ length: 10 }, () => ({
+      x: 0.5 + vertices[0][0] * 0.02,
+      y: 0.5 - vertices[0][1] * 0.02,
+      z: 0,
+    })),
+  ];
 
   it('emits one triangle per topology triangle', () => {
     expect(buildFaceTriangles(flat, fitProjection(640, 480, 4 / 3)).length).toBe(FACE_TRIS.length / 3);
