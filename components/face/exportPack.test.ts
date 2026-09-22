@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
-import { pickVideoMime, extensionForMime, takeStamp, buildPackZip, VIDEO_MIME_CANDIDATES } from './exportPack';
+import { pickVideoMime, takeStamp, buildPackZip, VIDEO_MIME_CANDIDATES } from './exportPack';
 
 describe('pickVideoMime', () => {
   it('prefers mp4 with codecs, then mp4, then webm', () => {
@@ -15,17 +15,6 @@ describe('pickVideoMime', () => {
   });
   it('returns null when nothing is supported', () => {
     expect(pickVideoMime(() => false)).toBeNull();
-  });
-});
-
-describe('extensionForMime', () => {
-  it('maps video and audio types', () => {
-    expect(extensionForMime('video/mp4;codecs=avc1,mp4a')).toBe('mp4');
-    expect(extensionForMime('video/webm;codecs=vp9,opus')).toBe('webm');
-    expect(extensionForMime('audio/webm;codecs=opus')).toBe('webm');
-    expect(extensionForMime('audio/mp4')).toBe('m4a');
-    expect(extensionForMime('audio/ogg')).toBe('ogg');
-    expect(extensionForMime('application/x-unknown')).toBe('bin');
   });
 });
 

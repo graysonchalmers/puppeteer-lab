@@ -67,33 +67,52 @@ export async function renderTakeToVideo(o: RenderTakeOptions): Promise<{ blob: B
   let audioEl: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
   let audioUrl: string | null = null;
-  if (o.audio) {
-    audioUrl = URL.createObjectURL(o.audio.blob);
-    audioEl = new Audio(audioUrl);
-    audioCtx = new AudioContext();
-    const source = audioCtx.createMediaElementSource(audioEl);
-    const dest = audioCtx.createMediaStreamDestination();
-    source.connect(dest); // deliberately NOT to audioCtx.destination: silent export
-    dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-  }
-
+  let recorder: MediaRecorder | null = null;
+  let stopped: Promise<Blob> | null = null;
+  let didStart = false;
   const chunks: Blob[] = [];
-  const recorder = new MediaRecorder(stream, { mimeType });
-  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-  const stopped = new Promise<Blob>((resolve, reject) => {
-    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
-    recorder.onerror = () => reject(new Error('MediaRecorder failed during export.'));
-  });
-  const started = new Promise<void>((resolve) => { recorder.onstart = () => resolve(); });
 
-  // Any throw from here (a bad `draw`, an onProgress that throws, a cancel)
-  // lands in `renderError` / o.signal.aborted below; the finally block below
-  // guarantees the recorder is asked to stop and audio is paused on every
-  // path so `stopped` always eventually settles and cleanup can proceed.
+  // Resolves on Cancel, so a recorder whose onstart never fires can't pin
+  // the export (and every control it disables) forever.
+  let onAbort: (() => void) | null = null;
+  const abortPromise = new Promise<void>((resolve) => {
+    if (o.signal.aborted) return resolve();
+    onAbort = () => resolve();
+    o.signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+  // Every throw from here (audio graph or MediaRecorder setup, start(), a bad
+  // `draw`, an onProgress that throws, a cancel) lands in `renderError` /
+  // o.signal.aborted; the finally block and the cleanup after it run on every
+  // path, so the AudioContext, blob URL and canvas track are always released.
   let renderError: unknown = null;
   try {
-    recorder.start(250);
-    await started;
+    if (o.audio) {
+      audioUrl = URL.createObjectURL(o.audio.blob);
+      audioEl = new Audio(audioUrl);
+      audioCtx = new AudioContext();
+      const source = audioCtx.createMediaElementSource(audioEl);
+      const dest = audioCtx.createMediaStreamDestination();
+      source.connect(dest); // deliberately NOT to audioCtx.destination: silent export
+      dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+    }
+
+    const rec = new MediaRecorder(stream, { mimeType });
+    recorder = rec;
+    rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    stopped = new Promise<Blob>((resolve, reject) => {
+      rec.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      rec.onerror = () => reject(new Error('MediaRecorder failed during export.'));
+    });
+    stopped.catch(() => {}); // observed below only if start() succeeded
+    const started = new Promise<void>((resolve) => { rec.onstart = () => resolve(); });
+
+    rec.start(250);
+    didStart = true;
+    await Promise.race([started, stopped.then(() => {}), abortPromise]);
+    if (!o.signal.aborted && rec.state === 'inactive') {
+      throw new Error('MediaRecorder stopped before the export started.');
+    }
 
     // Lead-in: hold frame 0 while the encoder warms up, so the take's real
     // first frames aren't the ones dropped once the clock starts.
@@ -104,28 +123,31 @@ export async function renderTakeToVideo(o: RenderTakeOptions): Promise<{ blob: B
       if (audioEl && audioCtx) {
         try {
           await audioCtx.resume();
-          await audioEl.play();
+          if (!o.signal.aborted) await audioEl.play();
         } catch (err) {
           console.warn('Export audio could not start; exporting silent video on the wall clock:', err);
+          audioEl.pause();
           audioEl = null;
         }
       }
 
-      await new Promise<void>((resolve, reject) => {
-        const tick = () => {
-          if (o.signal.aborted) return resolve();
-          try {
-            const clock = audioEl ? audioEl.currentTime * 1000 : performance.now() - t0;
-            o.draw(ctx, o.frames[findFrameIndex(o.frames, clock)], o.width, o.height);
-            o.onProgress?.(Math.min(clock, o.durationMs));
-            if (clock >= o.durationMs || audioEl?.ended) return resolve();
-            requestAnimationFrame(tick);
-          } catch (err) {
-            reject(err);
-          }
-        };
-        tick();
-      });
+      if (!o.signal.aborted) {
+        await new Promise<void>((resolve, reject) => {
+          const tick = () => {
+            if (o.signal.aborted) return resolve();
+            try {
+              const clock = audioEl ? audioEl.currentTime * 1000 : performance.now() - t0;
+              o.draw(ctx, o.frames[findFrameIndex(o.frames, clock)], o.width, o.height);
+              o.onProgress?.(Math.min(clock, o.durationMs));
+              if (clock >= o.durationMs || audioEl?.ended) return resolve();
+              requestAnimationFrame(tick);
+            } catch (err) {
+              reject(err);
+            }
+          };
+          tick();
+        });
+      }
 
       if (!o.signal.aborted) {
         // Tail: hold the final frame briefly so MediaRecorder.stop() doesn't
@@ -138,23 +160,36 @@ export async function renderTakeToVideo(o: RenderTakeOptions): Promise<{ blob: B
     renderError = err;
   } finally {
     audioEl?.pause();
-    if (recorder.state !== 'inactive') recorder.stop();
+    try {
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+    } catch (err) {
+      renderError = renderError ?? err;
+    }
   }
 
   let blob: Blob | null = null;
-  try {
-    blob = await stopped;
-  } catch (err) {
-    renderError = renderError ?? err;
+  // Only a recorder that actually started will ever fire onstop/onerror.
+  if (didStart && stopped) {
+    try {
+      blob = await stopped;
+    } catch (err) {
+      renderError = renderError ?? err;
+    }
   }
 
   // Stream tracks are only released once `stopped` has settled: stopping
   // them earlier can truncate whatever MediaRecorder was still flushing.
+  if (onAbort) o.signal.removeEventListener('abort', onAbort);
   stream.getTracks().forEach((t) => t.stop());
-  await audioCtx?.close();
+  try {
+    await audioCtx?.close();
+  } catch (err) {
+    console.warn('Export AudioContext did not close cleanly:', err);
+  }
   if (audioUrl) URL.revokeObjectURL(audioUrl);
 
   if (renderError) throw renderError;
   if (o.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
-  return { blob: blob!, mimeType };
+  if (!blob) throw new Error('Export produced no video.');
+  return { blob, mimeType };
 }

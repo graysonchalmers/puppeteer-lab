@@ -14,8 +14,8 @@ import RecorderControls from './RecorderControls';
 import { drawPuppet } from './face/FaceMeshRenderer';
 import { Landmark } from './shared/trackerTypes';
 import { renderTakeToVideo } from './face/exportVideo';
-import { buildPackZip, extensionForMime, takeStamp } from './face/exportPack';
-import { downloadBlob } from './shared/download';
+import { buildPackZip, takeStamp } from './face/exportPack';
+import { downloadBlob, extensionForMime } from './shared/download';
 import { FrameData } from '../types';
 
 interface FaceDemoProps {
@@ -164,9 +164,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       return () => cancelAnimationFrame(animationFrameId);
   }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots]);
 
+  // Leaving the demo mid-export cancels it (releases the recorder, audio graph and stream).
+  useEffect(() => () => exportAbortRef.current?.abort(), []);
+
   const runExport = async (kind: 'video' | 'pack') => {
       const stage = canvasRef.current;
-      if (!recorder.hasData || !stage || exportAbortRef.current) return;
+      if (!recorder.hasData || !stage || exportAbortRef.current || recorder.isRecording) return;
       recorder.stopPlayback();
 
       const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
@@ -233,13 +236,17 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
          <div className="flex items-center gap-2 pointer-events-auto bg-[#111317]/80 backdrop-blur-md border border-white/10 px-2 py-1 rounded-lg text-[11px] font-mono">
              <button
                  onClick={() => setShowGazeRays(!showGazeRays)}
-                 className={`px-2 py-0.5 rounded transition-colors ${showGazeRays ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+                 disabled={exportState !== null}
+                 title={exportState ? 'Locked while exporting (the export uses the value from its start)' : undefined}
+                 className={`px-2 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showGazeRays ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
              >
                  GAZE RAYS
              </button>
              <button
                  onClick={() => setShowMocapDots(!showMocapDots)}
-                 className={`px-2 py-0.5 rounded transition-colors ${showMocapDots ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+                 disabled={exportState !== null}
+                 title={exportState ? 'Locked while exporting (the export uses the value from its start)' : undefined}
+                 className={`px-2 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showMocapDots ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
              >
                  MOCAP DOTS
              </button>
@@ -322,7 +329,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   onStopPlayback={recorder.stopPlayback}
                   onExport={recorder.exportData}
                   onImport={recorder.loadData}
-                  busy={exportState !== null}
+                  // Also locks exports while recording (Stop Recording ignores busy).
+                  busy={exportState !== null || recorder.isRecording}
                   primaryExport={{ label: 'Video', onSelect: () => runExport('video') }}
                   extraExports={[
                       { id: 'video', label: 'Video', hint: 'Puppet + your voice, as it plays', onSelect: () => runExport('video') },

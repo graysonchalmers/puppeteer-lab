@@ -7,6 +7,7 @@
  * timestamp, and the pack zip (media stored, JSON deflated).
  */
 import { zipSync, Zippable } from 'fflate';
+import { extensionForMime } from '../shared/download';
 
 export const VIDEO_MIME_CANDIDATES: readonly string[] = [
   'video/mp4;codecs=avc1,mp4a',
@@ -17,15 +18,6 @@ export const VIDEO_MIME_CANDIDATES: readonly string[] = [
 
 export function pickVideoMime(isSupported: (mime: string) => boolean): string | null {
   return VIDEO_MIME_CANDIDATES.find((m) => isSupported(m)) ?? null;
-}
-
-export function extensionForMime(mime: string): string {
-  const m = mime.toLowerCase();
-  if (m.startsWith('video/mp4')) return 'mp4';
-  if (m.startsWith('video/webm') || m.startsWith('audio/webm')) return 'webm';
-  if (m.startsWith('audio/mp4')) return 'm4a';
-  if (m.startsWith('audio/ogg')) return 'ogg';
-  return 'bin';
 }
 
 export function takeStamp(d: Date): string {

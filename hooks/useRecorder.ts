@@ -15,8 +15,7 @@ import {
     SerializeRequest,
     SerializeResponse,
 } from '../components/shared/recordingSchema';
-import { downloadBlob } from '../components/shared/download';
-import { extensionForMime } from '../components/face/exportPack';
+import { downloadBlob, extensionForMime } from '../components/shared/download';
 
 /** Runs one export through serialize.worker.ts and resolves with the Blob it
  * posts back. Constructed lazily (only when exportData actually runs, never
