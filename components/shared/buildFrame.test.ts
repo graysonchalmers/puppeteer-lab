@@ -148,4 +148,20 @@ describe('buildFrame face', () => {
     const back = buildFrame(lost, null, faceResult(0.8), 32, { ...faceOpts, faceFilter });
     expect(back.face!.landmarks[0].x).toBe(0.8);
   });
+
+  it('a combined face+hands tick populates hands, left/right and face in one frame', () => {
+    const handResult: RawHandResult = {
+      landmarks: [handAt(0.3, 0.5), handAt(0.7, 0.5)],
+      handedness: [leftHandedness, rightHandedness],
+    };
+    const f = buildFrame(null, handResult, faceResult(0.4), 0, faceOpts);
+    expect(f.hands).toHaveLength(2);
+    expect(f.left).not.toBeNull();
+    expect(f.right).not.toBeNull();
+    expect(f.left!.side).toBe('left');
+    expect(f.right!.side).toBe('right');
+    expect(f.face).not.toBeNull();
+    expect(f.face!.landmarks).toHaveLength(478);
+    expect(f.face!.blendshapes.jawOpen).toBe(0.4);
+  });
 });

@@ -8,6 +8,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2 } from 'lucide-react';
 import { useTracker } from '../hooks/useTracker';
 import { mouthOpenRatio, nextMouthOpen } from './face/mouthState';
+import { frameToCapture } from './face/captureFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
 import { drawPuppet } from './face/FaceMeshRenderer';
@@ -100,22 +101,16 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               // Else, read from Live MediaPipe
               else if (isCameraReady && video && video.readyState >= 2) {
                   if (video.videoWidth > 0) videoAspectRef.current = video.videoWidth / video.videoHeight;
-                  const tracked = frameRef.current;
-                  currentHands = tracked ? [tracked.right, tracked.left].filter((h) => h !== null).map((h) => h!.landmarks) : [];
-                  const face = tracked?.face;
-                  if (face) {
-                      currentLandmarks = face.landmarks;
-                      currentBlendshapesRecord = face.blendshapes;
-
-                      // RECORDING LOGIC (filtered landmarks, see recordingSchema capture notes)
-                      if (recorder.isRecording) {
-                          recorder.captureFrame({
-                              faceLandmarks: currentLandmarks,
-                              blendshapes: currentBlendshapesRecord,
-                              landmarks: currentHands,
-                          });
-                      }
+                  // Hands are captured even when the face drops (a hand over the face).
+                  const cap = frameToCapture(frameRef.current);
+                  currentHands = cap?.landmarks ?? [];
+                  if (cap?.faceLandmarks) {
+                      currentLandmarks = cap.faceLandmarks;
+                      currentBlendshapesRecord = cap.blendshapes ?? {};
                   }
+
+                  // RECORDING LOGIC (filtered landmarks, see recordingSchema capture notes)
+                  if (recorder.isRecording && cap) recorder.captureFrame(cap);
 
                   // Render PiP Webcam canvas if enabled
                   if (showPip && pipCanvasRef.current && pipCtx) {
@@ -145,7 +140,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   showMocapDots,
                   videoAspect: videoAspectRef.current,
               });
-              if (!currentLandmarks) {
+              // Live view only: a hands-only playback/export frame should look
+              // the same on stage as it does in the exported video.
+              if (!currentLandmarks && !exportFrameRef.current && !recorder.isPlaying) {
                   ctx.fillStyle = '#4B5563';
                   ctx.font = '12px monospace';
                   ctx.textAlign = 'center';

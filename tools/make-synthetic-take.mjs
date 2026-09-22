@@ -17,6 +17,9 @@ const V = fs.readFileSync('tools/data/canonical_face_model.obj', 'utf8').split('
   .map((l) => l.trim().split(/\s+/).slice(1, 4).map(Number));
 
 const FPS = 20, SECONDS = 3, KX = 0.022, KY = KX * (4 / 3);
+// --hands only: inclusive frame indices with no face (a hand over the face)
+// while the hands keep moving, so hands-only capture is verifiable camera-less.
+const FACE_DROPOUT = [36, 51];
 const LEFT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
 const RIGHT_EYE = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466];
 const UPPER_LIPS = [191, 80, 81, 82, 13, 312, 311, 310, 415];
@@ -72,6 +75,10 @@ for (let f = 0; f < FPS * SECONDS; f++) {
   if (withHands) {
     const wave = Math.sin(t * Math.PI * 2) * 0.35;
     frame.landmarks = [hand(0.22, 0.78, 0.1, wave), hand(0.78, 0.78, 0.1, -wave)];
+    if (f >= FACE_DROPOUT[0] && f <= FACE_DROPOUT[1]) {
+      delete frame.faceLandmarks; // omit BOTH face keys, as live capture does
+      delete frame.blendshapes;
+    }
   }
   frames.push(frame);
 }
