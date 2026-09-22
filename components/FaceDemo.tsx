@@ -40,6 +40,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
   const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
   const [browBoost, setBrowBoost] = useState(0.5);
+  const [jawBoost, setJawBoost] = useState(0.5);
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
   const videoAspectRef = useRef(4 / 3);
 
@@ -150,6 +151,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   showMocapDots,
                   videoAspect: aspect,
                   browBoost,
+                  jawBoost,
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -173,7 +175,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       render();
 
       return () => cancelAnimationFrame(animationFrameId);
-  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost]);
+  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost, jawBoost]);
 
   // Leaving the demo mid-export cancels it (releases the recorder, audio graph and stream).
   useEffect(() => () => exportAbortRef.current?.abort(), []);
@@ -206,7 +208,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
                   state = stepPuppetState(state, face, frame.blendshapes, aspect);
-                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost });
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost, jawBoost });
               },
               onProgress: (ms) => {
                   const now = performance.now();
@@ -401,6 +403,27 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      onChange={(e) => setBrowBoost(parseFloat(e.target.value))}
                      className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
                      title="How far the puppet brows travel when you raise or lower yours."
+                 />
+                 <div className="flex justify-between text-[9px] text-gray-500 mt-1">
+                     <span>RAW</span><span>EXAGGERATED</span>
+                 </div>
+             </div>
+
+             {/* Jaw Boost (puppetState.teethGap / boostJaw) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between text-[11px] text-gray-300 mb-1.5">
+                     <span className="text-gray-400">Jaw Boost</span>
+                     <span className="text-white font-bold tabular-nums">{Math.round(jawBoost * 100)}%</span>
+                 </div>
+                 <input
+                     type="range"
+                     min={0}
+                     max={1}
+                     step={0.05}
+                     value={jawBoost}
+                     onChange={(e) => setJawBoost(parseFloat(e.target.value))}
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     title="How readily the teeth part and the jaw drops when you talk."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
                      <span>RAW</span><span>EXAGGERATED</span>

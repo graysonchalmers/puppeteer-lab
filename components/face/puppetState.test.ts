@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { Landmark } from '../shared/trackerTypes';
 import {
   INITIAL_PUPPET_STATE, stepPuppetState, browLift, boostBrows, BROW_BOOST_MAX,
-  TEETH_APART_ABOVE, TEETH_TOGETHER_BELOW, BROW_DOWN_SCALE,
+  BROW_DOWN_SCALE, teethGap, boostJaw, JAW_BOOST_MAX, JAW_REST, JAW_FULL, JAW_GAIN,
 } from './puppetState';
 import { LEFT_EYEBROW, RIGHT_EYEBROW, LEFT_EYE_CONTOUR } from './faceTopology';
 
@@ -28,30 +28,18 @@ describe('stepPuppetState', () => {
     expect(stepPuppetState(prev, undefined, {}, 1)).toBe(prev);
   });
 
-  it('lips open with jaw low shows teeth together; jaw high shows them apart', () => {
-    const open = face(0.04); // ratio 0.2 at aspect 1
-    const together = stepPuppetState(INITIAL_PUPPET_STATE, open, { jawOpen: 0.05 }, 1);
-    expect(together.mouthOpen).toBe(true);
-    expect(together.teethApart).toBe(false);
-    const apart = stepPuppetState(together, open, { jawOpen: TEETH_APART_ABOVE + 0.1 }, 1);
-    expect(apart.teethApart).toBe(true);
+  it('smooths the jaw toward jawOpen', () => {
+    let s = stepPuppetState(INITIAL_PUPPET_STATE, face(0.04), { jawOpen: 0.5 }, 1);
+    expect(s.jaw).toBeGreaterThan(0);
+    expect(s.jaw).toBeLessThan(0.5);
+    for (let i = 0; i < 20; i++) s = stepPuppetState(s, face(0.04), { jawOpen: 0.5 }, 1);
+    expect(s.jaw).toBeCloseTo(0.5, 3);
   });
 
-  it('teeth-apart has hysteresis on jawOpen', () => {
-    const open = face(0.04);
-    const apart = stepPuppetState(INITIAL_PUPPET_STATE, open, { jawOpen: 0.5 }, 1);
-    const mid = (TEETH_APART_ABOVE + TEETH_TOGETHER_BELOW) / 2;
-    expect(stepPuppetState(apart, open, { jawOpen: mid }, 1).teethApart).toBe(true);
-    expect(stepPuppetState(INITIAL_PUPPET_STATE, open, { jawOpen: mid }, 1).teethApart).toBe(false);
-  });
-
-  it('never shows teeth apart with the lips closed', () => {
-    expect(stepPuppetState(INITIAL_PUPPET_STATE, face(0), { jawOpen: 0.9 }, 1).teethApart).toBe(false);
-  });
-
-  it('falls back to the lip gap when a take has no jawOpen', () => {
-    expect(stepPuppetState(INITIAL_PUPPET_STATE, face(0.06), {}, 1).teethApart).toBe(true);
-    expect(stepPuppetState(INITIAL_PUPPET_STATE, face(0.02), {}, 1).teethApart).toBe(false);
+  it('estimates the jaw from the lip gap when a take has no jawOpen', () => {
+    let s = INITIAL_PUPPET_STATE;
+    for (let i = 0; i < 20; i++) s = stepPuppetState(s, face(0.06), {}, 1);
+    expect(s.jaw).toBeGreaterThan(0.2);
   });
 
   it('smooths brows toward the blendshape lift', () => {
@@ -73,6 +61,46 @@ describe('brow sides (verified on camera 2026-09-22)', () => {
     const r = stepPuppetState(INITIAL_PUPPET_STATE, face(), { browOuterUpRight: 1 }, 1);
     expect(r.brows[1]).toBeGreaterThan(0);
     expect(r.brows[0]).toBe(0);
+  });
+});
+
+describe('teethGap', () => {
+  const st = (jaw: number, mouthOpen = true) => ({ ...INITIAL_PUPPET_STATE, mouthOpen, jaw });
+
+  it('is 0 with the lips closed, whatever the jaw', () => {
+    expect(teethGap(st(0.9, false), 1)).toBe(0);
+  });
+
+  it('parts continuously: touching at rest, partial in between, full at JAW_FULL', () => {
+    expect(teethGap(st(JAW_REST), 0)).toBe(0);
+    expect(teethGap(st((JAW_REST + JAW_FULL) / 2), 0)).toBeCloseTo(0.5);
+    expect(teethGap(st(JAW_FULL), 0)).toBe(1);
+  });
+
+  it('Jaw Boost parts the teeth for a speech-sized jaw', () => {
+    expect(teethGap(st(0.1), 0)).toBeLessThan(0.3);
+    expect(teethGap(st(0.1), 0.5)).toBeGreaterThan(0.5);
+    expect(teethGap(st(0.1), 1)).toBeCloseTo(Math.min(1, (0.1 * (1 + JAW_GAIN) - JAW_REST) / (JAW_FULL - JAW_REST)));
+  });
+});
+
+describe('boostJaw', () => {
+  const st = (jaw: number, mouthOpen = true) => ({ ...INITIAL_PUPPET_STATE, mouthOpen, jaw });
+
+  it('drops the lower lip down the face, never mutating, corners fixed', () => {
+    const lm = face(0.04);
+    const before = JSON.stringify(lm);
+    const out = boostJaw(lm, st(1), 1, 1);
+    expect(JSON.stringify(lm)).toBe(before);
+    expect(out[14].y).toBeCloseTo(0.64 + 0.6 * JAW_BOOST_MAX); // face height 0.6
+    expect(out[61]).toBe(lm[61]);
+    expect(out[13]).toBe(lm[13]);
+  });
+
+  it('does nothing with the lips closed or the slider at 0', () => {
+    const lm = face();
+    expect(boostJaw(lm, st(1, false), 1, 1)).toBe(lm);
+    expect(boostJaw(lm, st(1), 0, 1)).toBe(lm);
   });
 });
 

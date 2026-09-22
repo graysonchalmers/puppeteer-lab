@@ -10,7 +10,7 @@
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, buildFaceTriangles, Projection, ShadedTri } from './lowPoly';
 import { buildHandTriangles } from './handMesh';
-import { PuppetState, boostBrows } from './puppetState';
+import { PuppetState, boostBrows, boostJaw, teethGap } from './puppetState';
 import {
   LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
   LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS,
@@ -24,10 +24,10 @@ const LIP_SEAM = '#15171B';
 const TOOTH = '#E6E4DC';
 const TOOTH_SEAM = '#8E8C85';
 const BROW = '#16181C';
-/** Tooth row height: a share of mouth width, capped to a share of the lip
- * gap so a dark cavity always shows between the rows when teeth are apart. */
+/** Tooth row height with teeth fully apart: a share of mouth width, capped to
+ * a share of half the lip gap so the dark cavity always shows between rows. */
 const TOOTH_BAND = 0.08;
-const TOOTH_BAND_MAX_GAP = 0.3;
+const TOOTH_BAND_MAX_HALF_GAP = 0.6;
 
 export interface PuppetFrame {
   face: Landmark[] | null;
@@ -41,6 +41,8 @@ export interface PuppetOptions {
   videoAspect: number;
   /** 0..1 Brow Boost slider (0 = raw landmarks). */
   browBoost: number;
+  /** 0..1 Jaw Boost slider: parts the teeth sooner and drops the lower lip/chin. */
+  jawBoost: number;
 }
 
 export function fillTriangles(ctx: CanvasRenderingContext2D, tris: ShadedTri[]) {
@@ -92,12 +94,12 @@ const fillToothRow = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projecti
   ctx.fill();
 };
 
-/** Closed: lip seam. Open, teeth together: one tooth block with a bite line.
- * Open, teeth apart: upper and lower rows with the dark cavity between. */
-const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, state: PuppetState) => {
+/** Closed: lip seam. Open: tooth rows hang from each lip and part
+ * continuously with `gap` (0 = touching at the bite line, 1 = fully apart). */
+const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, open: boolean, gap: number) => {
   tracePath(ctx, lm, LIPS_INNER, p);
   ctx.closePath();
-  if (!state.mouthOpen) {
+  if (!open) {
     ctx.fillStyle = LIP_CLOSED_FILL;
     ctx.fill();
     strokeLipSeam(ctx, lm, p, LIP_SEAM, 2);
@@ -105,19 +107,16 @@ const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection,
   }
   ctx.save();
   ctx.clip();
-  if (!state.teethApart) {
-    ctx.fillStyle = TOOTH;
-    ctx.fill();
-    strokeLipSeam(ctx, lm, p, TOOTH_SEAM, 1.5);
-  } else {
-    ctx.fillStyle = CAVITY;
-    ctx.fill();
-    const dist = (a: number, b: number) => Math.hypot(p.x(lm[a]) - p.x(lm[b]), p.y(lm[a]) - p.y(lm[b]));
-    const band = Math.min(dist(78, 308) * TOOTH_BAND, dist(13, 14) * TOOTH_BAND_MAX_GAP);
-    ctx.fillStyle = TOOTH;
-    fillToothRow(ctx, lm, p, LIPS_INNER_UPPER, band);
-    fillToothRow(ctx, lm, p, LIPS_INNER_LOWER, -band);
-  }
+  ctx.fillStyle = CAVITY;
+  ctx.fill();
+  const dist = (a: number, b: number) => Math.hypot(p.x(lm[a]) - p.x(lm[b]), p.y(lm[a]) - p.y(lm[b]));
+  const half = dist(13, 14) / 2;
+  const apartRow = Math.min(dist(78, 308) * TOOTH_BAND, half * TOOTH_BAND_MAX_HALF_GAP);
+  const row = half * (1 - gap) + apartRow * gap;
+  ctx.fillStyle = TOOTH;
+  fillToothRow(ctx, lm, p, LIPS_INNER_UPPER, row);
+  fillToothRow(ctx, lm, p, LIPS_INNER_LOWER, -row);
+  if (gap < 0.1) strokeLipSeam(ctx, lm, p, TOOTH_SEAM, 1.5);
   ctx.restore();
 };
 
@@ -255,11 +254,14 @@ export function drawPuppet(
 
   const p = fitProjection(w, h, opts.videoAspect);
   if (frame.face && frame.face.length >= 468) {
-    const face = boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect);
+    const face = boostJaw(
+      boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect),
+      frame.state, opts.jawBoost, opts.videoAspect
+    );
     fillTriangles(ctx, buildFaceTriangles(face, p));
     drawBrow(ctx, face, LEFT_EYEBROW, p);
     drawBrow(ctx, face, RIGHT_EYEBROW, p);
-    drawMouth(ctx, face, p, frame.state);
+    drawMouth(ctx, face, p, frame.state.mouthOpen, teethGap(frame.state, opts.jawBoost));
     // MediaPipe iris centers: 468 sits in the 33..133 eye, 473 in the 263..362 eye.
     renderStylizedEye(ctx, face, LEFT_EYE_CONTOUR, 468, p, opts.showGazeRays);
     renderStylizedEye(ctx, face, RIGHT_EYE_CONTOUR, 473, p, opts.showGazeRays);
