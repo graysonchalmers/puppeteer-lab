@@ -82,11 +82,16 @@ export function useTracker(
     };
 
     const setup = async () => {
+      // Which model was loading when a throw happened, so the error names the
+      // one that actually failed. null = the shared WASM fileset (the message
+      // then keeps the old requested-modality wording).
+      let loading: 'hand' | 'face' | null = null;
       try {
         const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
         if (!isActive) return;
 
         if (hands) {
+          loading = 'hand';
           handLandmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
             baseOptions: { modelAssetPath: HAND_MODEL_PATH, delegate: 'GPU' },
             runningMode: 'VIDEO',
@@ -97,6 +102,7 @@ export function useTracker(
           });
         }
         if (face && isActive) {
+          loading = 'face';
           faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
             baseOptions: { modelAssetPath: FACE_MODEL_PATH, delegate: 'GPU' },
             outputFaceBlendshapes: true,
@@ -116,7 +122,7 @@ export function useTracker(
         startCamera();
       } catch (err: any) {
         console.error('Error initializing MediaPipe:', err);
-        setError(`Failed to load ${face && !hands ? 'face' : 'hand'} tracking: ${err.message}`);
+        setError(`Failed to load ${loading ?? (face && !hands ? 'face' : 'hand')} tracking: ${err.message}`);
       }
     };
 

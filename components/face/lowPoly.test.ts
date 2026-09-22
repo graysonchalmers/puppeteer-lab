@@ -84,7 +84,9 @@ describe('buildFaceTriangles', () => {
       y: 0.5 - v[1] * 0.02,
       z: 0,
     })),
-    // Append 10 copies of vertex 0 to reach 478 entries
+    // Pad to 478 entries only so the array matches MediaPipe's 478-landmark
+    // shape (the 468 canonical vertices + 10 iris points); not required by
+    // buildFaceTriangles itself, since FACE_TRIS's max index is 466.
     ...Array.from({ length: 10 }, () => ({
       x: 0.5 + vertices[0][0] * 0.02,
       y: 0.5 - vertices[0][1] * 0.02,

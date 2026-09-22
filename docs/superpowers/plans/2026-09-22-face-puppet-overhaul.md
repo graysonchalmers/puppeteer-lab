@@ -30,6 +30,8 @@
 1. **Hands in `FrameData` reuse the existing `landmarks` field** instead of adding `hands?: {side, landmarks}[]`. `FrameData.landmarks` already carries full hands, and `recordingSchema.ts` already round-trips them through v3 (`buildFullHand` / `extractHandsFromV3`, index 0 = right, index 1 = left). The renderer is chirality-agnostic (two-sided shading), so side is not needed to draw. Known limitation, same as Hand Telemetry today: a frame with only the left hand is labelled `right` in the v3 file.
 2. **`capture.smoothing` in the v3 envelope is deferred.** It needs plumbing through `SerializeRequest` and the worker for a field nothing reads yet. Recorded as an open question in HANDOFF (Task 16).
 3. **`useFaceTracker.ts` is deleted, not turned into an adapter.** Its only consumer is `FaceDemo.tsx`, which moves to `useTracker` directly (Task 5). An adapter with zero consumers is dead code; TDD-001 Phase 4 deletes adapters anyway.
+4. **Finger shading is continuous, not strictly two tones** (accepted at the final whole-branch review, 2026-09-22). Each finger segment's tone is `0.45 + 0.35 * |segment direction · 2D light|` on the gray ramp (`components/face/handMesh.ts`), so it varies continuously from 0.45 to 0.80 rather than taking exactly two fixed tones; it reads better as the hand turns and stays on the ramp.
+5. **Two extra mouth tones extend the palette** (accepted at the final whole-branch review, 2026-09-22): closed-mouth fill `#3A3D44` and the closed-mouth seam `#15171B`, alongside the specified cavity `#0B0C0E`.
 
 ## File map
 
