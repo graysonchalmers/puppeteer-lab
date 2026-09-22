@@ -37,7 +37,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
-  const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: false, face: true, faceSmoothing });
+  const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
   const mouthOpenRef = useRef(false);
   const videoAspectRef = useRef(4 / 3);
 
@@ -81,10 +81,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               // Determine Data Source
               let currentLandmarks: Landmark[] | undefined;
               let currentBlendshapesRecord: Record<string, number> = {};
+              let currentHands: Landmark[][] = [];
 
               if (exportFrameRef.current) {
                   currentLandmarks = exportFrameRef.current.faceLandmarks;
                   currentBlendshapesRecord = exportFrameRef.current.blendshapes || {};
+                  currentHands = exportFrameRef.current.landmarks ?? [];
               }
               // If Playing, read from buffer
               else if (recorder.isPlaying) {
@@ -92,12 +94,15 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   if (frame) {
                       currentLandmarks = frame.faceLandmarks;
                       currentBlendshapesRecord = frame.blendshapes || {};
+                      currentHands = frame.landmarks ?? [];
                   }
-              } 
+              }
               // Else, read from Live MediaPipe
               else if (isCameraReady && video && video.readyState >= 2) {
                   if (video.videoWidth > 0) videoAspectRef.current = video.videoWidth / video.videoHeight;
-                  const face = frameRef.current?.face;
+                  const tracked = frameRef.current;
+                  currentHands = tracked ? [tracked.right, tracked.left].filter((h) => h !== null).map((h) => h!.landmarks) : [];
+                  const face = tracked?.face;
                   if (face) {
                       currentLandmarks = face.landmarks;
                       currentBlendshapesRecord = face.blendshapes;
@@ -106,7 +111,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                       if (recorder.isRecording) {
                           recorder.captureFrame({
                               faceLandmarks: currentLandmarks,
-                              blendshapes: currentBlendshapesRecord
+                              blendshapes: currentBlendshapesRecord,
+                              landmarks: currentHands,
                           });
                       }
                   }
@@ -134,7 +140,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               }
 
               // Render Stylized Puppet Character
-              drawPuppet(ctx, { face: currentLandmarks ?? null, mouthOpen: mouthOpenRef.current }, w, h, {
+              drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, mouthOpen: mouthOpenRef.current }, w, h, {
                   showGazeRays,
                   showMocapDots,
                   videoAspect: videoAspectRef.current,
@@ -188,7 +194,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
                   if (face) mouthOpen = nextMouthOpen(mouthOpen, mouthOpenRatio(face, videoAspectRef.current));
-                  drawPuppet(ctx, { face, mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: videoAspectRef.current });
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: videoAspectRef.current });
               },
               onProgress: (ms) => {
                   const now = performance.now();
@@ -339,7 +345,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
           <div className="space-y-4">
              <div className="bg-[#15171C] p-3 rounded border border-white/10 text-[10px] text-gray-400 leading-relaxed">
-                 Real-time facial blendshapes driving character puppet geometry, eye gaze, and speech synchronization.
+                 Low-poly puppet driven by 478 face landmarks, 52 blendshapes, and both hands.
              </div>
 
              {/* Face Smoothing (One Euro minCutoff) */}

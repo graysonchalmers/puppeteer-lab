@@ -9,6 +9,7 @@
  */
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, buildFaceTriangles, Projection, ShadedTri } from './lowPoly';
+import { buildHandTriangles } from './handMesh';
 import {
   LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
   LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS,
@@ -22,6 +23,7 @@ const LIP_SEAM = '#15171B';
 
 export interface PuppetFrame {
   face: Landmark[] | null;
+  hands: Landmark[][];
   mouthOpen: boolean;
 }
 
@@ -207,6 +209,11 @@ export function drawPuppet(
     renderStylizedEye(ctx, face, LEFT_EYE_CONTOUR, 468, p, opts.showGazeRays);
     renderStylizedEye(ctx, face, RIGHT_EYE_CONTOUR, 473, p, opts.showGazeRays);
     if (opts.showMocapDots) drawMocapDots(ctx, face, p);
+  }
+
+  // Hands always in front of the face (you gesture in front of yourself).
+  for (const hand of frame.hands) {
+    if (hand && hand.length >= 21) fillTriangles(ctx, buildHandTriangles(hand, p));
   }
 
   ctx.restore();
