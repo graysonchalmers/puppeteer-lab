@@ -71,7 +71,15 @@ for (let f = 0; f < FPS * SECONDS; f++) {
   for (let i = 468; i < 473; i++) pts[i] = center(LEFT_EYE);
   for (let i = 473; i < 478; i++) pts[i] = center(RIGHT_EYE);
 
-  const frame = { timestamp: Math.round(t * 1000), faceLandmarks: pts, blendshapes: { jawOpen: r4(open) } };
+  // First mouth cycle: lips part, jaw stays low (teeth together). Second: jaw opens (teeth apart).
+  const jawOpen = t < 1 ? 0.05 : open;
+  // Brows up for the first half, down for the second (drives the brow boost).
+  const brow = Math.sin((t / SECONDS) * Math.PI * 2);
+  const up = r4(Math.max(0, brow)), down = r4(Math.max(0, -brow));
+  const frame = {
+    timestamp: Math.round(t * 1000), faceLandmarks: pts,
+    blendshapes: { jawOpen: r4(jawOpen), browInnerUp: up, browOuterUpLeft: up, browOuterUpRight: up, browDownLeft: down, browDownRight: down },
+  };
   if (withHands) {
     const wave = Math.sin(t * Math.PI * 2) * 0.35;
     frame.landmarks = [hand(0.22, 0.78, 0.1, wave), hand(0.78, 0.78, 0.1, -wave)];

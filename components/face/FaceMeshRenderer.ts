@@ -10,6 +10,7 @@
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, buildFaceTriangles, Projection, ShadedTri } from './lowPoly';
 import { buildHandTriangles } from './handMesh';
+import { PuppetState, boostBrows } from './puppetState';
 import {
   LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
   LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS,
@@ -20,17 +21,26 @@ const ACCENT = '#EE3B2B';
 const CAVITY = '#0B0C0E';
 const LIP_CLOSED_FILL = '#3A3D44';
 const LIP_SEAM = '#15171B';
+const TOOTH = '#E6E4DC';
+const TOOTH_SEAM = '#8E8C85';
+const BROW = '#16181C';
+/** Tooth row height: a share of mouth width, capped to a share of the lip
+ * gap so a dark cavity always shows between the rows when teeth are apart. */
+const TOOTH_BAND = 0.08;
+const TOOTH_BAND_MAX_GAP = 0.3;
 
 export interface PuppetFrame {
   face: Landmark[] | null;
   hands: Landmark[][];
-  mouthOpen: boolean;
+  state: PuppetState;
 }
 
 export interface PuppetOptions {
   showGazeRays: boolean;
   showMocapDots: boolean;
   videoAspect: number;
+  /** 0..1 Brow Boost slider (0 = raw landmarks). */
+  browBoost: number;
 }
 
 export function fillTriangles(ctx: CanvasRenderingContext2D, tris: ShadedTri[]) {
@@ -55,28 +65,71 @@ const tracePath = (ctx: CanvasRenderingContext2D, lm: Landmark[], idx: readonly 
   for (let i = 1; i < idx.length; i++) ctx.lineTo(p.x(lm[idx[i]]), p.y(lm[idx[i]]));
 };
 
-const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, open: boolean) => {
-  tracePath(ctx, lm, LIPS_INNER, p);
-  ctx.closePath();
-  ctx.fillStyle = open ? CAVITY : LIP_CLOSED_FILL;
-  ctx.fill();
-  if (open) return;
-
-  // Closed: one seam through the midpoints of paired upper/lower inner-lip points.
-  const mid = (i: number) => ({
-    x: (p.x(lm[LIPS_INNER_UPPER[i]]) + p.x(lm[LIPS_INNER_LOWER[i]])) / 2,
-    y: (p.y(lm[LIPS_INNER_UPPER[i]]) + p.y(lm[LIPS_INNER_LOWER[i]])) / 2,
-  });
+/** Line through the midpoints of paired upper/lower inner-lip points. */
+const strokeLipSeam = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, color: string, width: number) => {
   ctx.beginPath();
   ctx.moveTo(p.x(lm[78]), p.y(lm[78]));
   for (let i = 0; i < LIPS_INNER_UPPER.length; i++) {
-    const m = mid(i);
-    ctx.lineTo(m.x, m.y);
+    const u = lm[LIPS_INNER_UPPER[i]];
+    const l = lm[LIPS_INNER_LOWER[i]];
+    ctx.lineTo((p.x(u) + p.x(l)) / 2, (p.y(u) + p.y(l)) / 2);
   }
   ctx.lineTo(p.x(lm[308]), p.y(lm[308]));
-  ctx.strokeStyle = LIP_SEAM;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
   ctx.lineCap = 'round';
+  ctx.stroke();
+};
+
+/** A tooth row hanging off one inner lip, `dy` pixels toward the other lip. */
+const fillToothRow = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, lip: readonly number[], dy: number) => {
+  const ring = [78, ...lip, 308];
+  ctx.beginPath();
+  ctx.moveTo(p.x(lm[ring[0]]), p.y(lm[ring[0]]));
+  for (const i of ring.slice(1)) ctx.lineTo(p.x(lm[i]), p.y(lm[i]));
+  for (const i of [...ring].reverse()) ctx.lineTo(p.x(lm[i]), p.y(lm[i]) + dy);
+  ctx.closePath();
+  ctx.fill();
+};
+
+/** Closed: lip seam. Open, teeth together: one tooth block with a bite line.
+ * Open, teeth apart: upper and lower rows with the dark cavity between. */
+const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, state: PuppetState) => {
+  tracePath(ctx, lm, LIPS_INNER, p);
+  ctx.closePath();
+  if (!state.mouthOpen) {
+    ctx.fillStyle = LIP_CLOSED_FILL;
+    ctx.fill();
+    strokeLipSeam(ctx, lm, p, LIP_SEAM, 2);
+    return;
+  }
+  ctx.save();
+  ctx.clip();
+  if (!state.teethApart) {
+    ctx.fillStyle = TOOTH;
+    ctx.fill();
+    strokeLipSeam(ctx, lm, p, TOOTH_SEAM, 1.5);
+  } else {
+    ctx.fillStyle = CAVITY;
+    ctx.fill();
+    const dist = (a: number, b: number) => Math.hypot(p.x(lm[a]) - p.x(lm[b]), p.y(lm[a]) - p.y(lm[b]));
+    const band = Math.min(dist(78, 308) * TOOTH_BAND, dist(13, 14) * TOOTH_BAND_MAX_GAP);
+    ctx.fillStyle = TOOTH;
+    fillToothRow(ctx, lm, p, LIPS_INNER_UPPER, band);
+    fillToothRow(ctx, lm, p, LIPS_INNER_LOWER, -band);
+  }
+  ctx.restore();
+};
+
+/** Flat stylized brow: the landmark brow band (upper row out, lower row back). */
+const drawBrow = (ctx: CanvasRenderingContext2D, lm: Landmark[], idx: readonly number[], p: Projection) => {
+  tracePath(ctx, lm, idx, p);
+  ctx.closePath();
+  ctx.fillStyle = BROW;
+  ctx.strokeStyle = BROW;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.fill();
   ctx.stroke();
 };
 
@@ -201,10 +254,12 @@ export function drawPuppet(
   ctx.fillRect(0, 0, w, h);
 
   const p = fitProjection(w, h, opts.videoAspect);
-  const face = frame.face;
-  if (face && face.length >= 468) {
+  if (frame.face && frame.face.length >= 468) {
+    const face = boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect);
     fillTriangles(ctx, buildFaceTriangles(face, p));
-    drawMouth(ctx, face, p, frame.mouthOpen);
+    drawBrow(ctx, face, LEFT_EYEBROW, p);
+    drawBrow(ctx, face, RIGHT_EYEBROW, p);
+    drawMouth(ctx, face, p, frame.state);
     // MediaPipe iris centers: 468 sits in the 33..133 eye, 473 in the 263..362 eye.
     renderStylizedEye(ctx, face, LEFT_EYE_CONTOUR, 468, p, opts.showGazeRays);
     renderStylizedEye(ctx, face, RIGHT_EYE_CONTOUR, 473, p, opts.showGazeRays);

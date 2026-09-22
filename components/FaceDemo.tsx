@@ -7,7 +7,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2 } from 'lucide-react';
 import { useTracker } from '../hooks/useTracker';
-import { mouthOpenRatio, nextMouthOpen } from './face/mouthState';
+import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
@@ -39,7 +39,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
   const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
-  const mouthOpenRef = useRef(false);
+  const [browBoost, setBrowBoost] = useState(0.5);
+  const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
   const videoAspectRef = useRef(4 / 3);
 
   // Recorder Hook
@@ -141,18 +142,14 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               // live view uses the live camera's.
               const aspect = exportFrameRef.current || recorder.isPlaying ? takeAspect() : videoAspectRef.current;
 
-              if (currentLandmarks) {
-                  mouthOpenRef.current = nextMouthOpen(
-                      mouthOpenRef.current,
-                      mouthOpenRatio(currentLandmarks, aspect)
-                  );
-              }
+              puppetStateRef.current = stepPuppetState(puppetStateRef.current, currentLandmarks, currentBlendshapesRecord, aspect);
 
               // Render Stylized Puppet Character
-              drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, mouthOpen: mouthOpenRef.current }, w, h, {
+              drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, state: puppetStateRef.current }, w, h, {
                   showGazeRays,
                   showMocapDots,
                   videoAspect: aspect,
+                  browBoost,
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -176,7 +173,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       render();
 
       return () => cancelAnimationFrame(animationFrameId);
-  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots]);
+  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost]);
 
   // Leaving the demo mid-export cancels it (releases the recorder, audio graph and stream).
   useEffect(() => () => exportAbortRef.current?.abort(), []);
@@ -193,7 +190,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       exportAbortRef.current = ctrl;
       setExportState({ kind, ms: 0 });
 
-      let mouthOpen = false;
+      let state = INITIAL_PUPPET_STATE;
       let lastProgress = 0;
       const aspect = takeAspect(); // fixed for the whole export
       try {
@@ -208,8 +205,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               draw: (ctx, frame, w, h) => {
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
-                  if (face) mouthOpen = nextMouthOpen(mouthOpen, mouthOpenRatio(face, aspect));
-                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], mouthOpen }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect });
+                  state = stepPuppetState(state, face, frame.blendshapes, aspect);
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost });
               },
               onProgress: (ms) => {
                   const now = performance.now();
@@ -386,6 +383,27 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
                      <span>LIGHT</span><span>HEAVY</span>
+                 </div>
+             </div>
+
+             {/* Brow Boost (puppetState.boostBrows) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between text-[11px] text-gray-300 mb-1.5">
+                     <span className="text-gray-400">Brow Boost</span>
+                     <span className="text-white font-bold tabular-nums">{Math.round(browBoost * 100)}%</span>
+                 </div>
+                 <input
+                     type="range"
+                     min={0}
+                     max={1}
+                     step={0.05}
+                     value={browBoost}
+                     onChange={(e) => setBrowBoost(parseFloat(e.target.value))}
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     title="How far the puppet brows travel when you raise or lower yours."
+                 />
+                 <div className="flex justify-between text-[9px] text-gray-500 mt-1">
+                     <span>RAW</span><span>EXAGGERATED</span>
                  </div>
              </div>
 
