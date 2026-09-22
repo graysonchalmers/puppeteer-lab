@@ -17,6 +17,7 @@ import { renderTakeToVideo } from './face/exportVideo';
 import { buildPackZip, takeStamp } from './face/exportPack';
 import { downloadBlob, extensionForMime } from './shared/download';
 import { FrameData } from '../types';
+import { holdAwake } from './shared/idle';
 
 interface FaceDemoProps {
   onBack: () => void;
@@ -40,7 +41,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
   const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
   const [browBoost, setBrowBoost] = useState(0.5);
-  const [jawBoost, setJawBoost] = useState(0.5);
+  const [jawBoost, setJawBoost] = useState(0.75);
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
   const videoAspectRef = useRef(4 / 3);
 
@@ -176,6 +177,10 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
       return () => cancelAnimationFrame(animationFrameId);
   }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost, jawBoost]);
+
+  // Exports render in real time: keep the idle auto-pause away meanwhile.
+  const exporting = exportState !== null;
+  useEffect(() => (exporting ? holdAwake() : undefined), [exporting]);
 
   // Leaving the demo mid-export cancels it (releases the recorder, audio graph and stream).
   useEffect(() => () => exportAbortRef.current?.abort(), []);

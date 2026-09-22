@@ -16,6 +16,7 @@ import {
     SerializeResponse,
 } from '../components/shared/recordingSchema';
 import { downloadBlob, extensionForMime } from '../components/shared/download';
+import { holdAwake } from '../components/shared/idle';
 
 /** Runs one export through serialize.worker.ts and resolves with the Blob it
  * posts back. Constructed lazily (only when exportData actually runs, never
@@ -262,6 +263,9 @@ export const useRecorder = (type: TrackingType) => {
             setFrameCount(bufferRef.current.length);
         }
     }, [isRecording]);
+
+    // Never auto-pause the camera mid-take (idle.ts).
+    useEffect(() => (isRecording ? holdAwake() : undefined), [isRecording]);
 
     // --- PLAYBACK ---
     const prepareAudio = () => {

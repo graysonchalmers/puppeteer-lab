@@ -7,6 +7,7 @@
 import React, { useState, lazy, Suspense } from 'react';
 import DemoHub from './components/DemoHub';
 import { AppMode } from './types';
+import IdleOverlay from './components/IdleOverlay';
 
 // The hub is the landing view, so it stays eager. Each demo pulls in the heavy
 // Three.js / R3F / drei / MediaPipe stack, so they are code-split and loaded on
@@ -41,6 +42,7 @@ const App: React.FC = () => {
           {mode === 'face' && <FaceDemo onBack={back} />}
         </Suspense>
       )}
+      {mode !== 'home' && <IdleOverlay />}
     </div>
   );
 };

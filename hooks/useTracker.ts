@@ -14,6 +14,7 @@ import { smoothingToLerp } from '../components/shared/smoothing';
 import { createOneEuroBank, faceSmoothingToMinCutoff } from '../components/shared/oneEuro';
 import { updateAvgDt, nextFaceAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
+import { poke, registerTracker, useIdlePaused } from '../components/shared/idle';
 
 export interface UseTrackerOptions {
   hands?: boolean;         // default true
@@ -29,6 +30,7 @@ export function useTracker(
 ) {
   const { hands = true, face = false } = options;
   const [isReady, setIsReady] = useState(false);
+  const idlePaused = useIdlePaused();
   const [error, setError] = useState<string | null>(null);
 
   const settingsRef = useRef({
@@ -72,6 +74,12 @@ export function useTracker(
 
   useEffect(() => {
     if (!hands && !face) return;
+    // Idle auto-pause: tear down camera + models; the effect re-runs on resume.
+    if (idlePaused) {
+      setIsReady(false);
+      return;
+    }
+    const releaseIdle = registerTracker();
     let isActive = true;
 
     const closeAll = () => {
@@ -179,6 +187,7 @@ export function useTracker(
           });
           if (faceLm && !runFace && prev) next.face = prev.face; // alternate tick: reuse
           frameRef.current = next;
+          if (next.hands.length > 0) poke(); // playing with your hands is using the app
         } catch (e) {
           console.warn('Detection failed this frame', e);
         }
@@ -191,6 +200,7 @@ export function useTracker(
 
     return () => {
       isActive = false;
+      releaseIdle();
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       closeAll();
       if (videoRef.current && videoRef.current.srcObject) {
@@ -198,7 +208,7 @@ export function useTracker(
         stream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [videoRef, hands, face]);
+  }, [videoRef, hands, face, idlePaused]);
 
   return { frameRef, isReady, error, setSmoothing, setConfidence, setFaceSmoothing };
 }

@@ -27,8 +27,10 @@ export const INITIAL_PUPPET_STATE: PuppetState = { mouthOpen: false, jaw: 0, bro
 export const JAW_REST = 0.04;
 export const JAW_FULL = 0.3;
 /** Jaw Boost slider 0..1 multiplies jawOpen by 1 + amount * JAW_GAIN (speech
- * often reads only 0.05-0.2 jawOpen, so unboosted teeth stay stuck together). */
-export const JAW_GAIN = 3;
+ * often reads only 0.05-0.2 jawOpen, so unboosted teeth stay stuck together).
+ * Rescaled 2026-09-22: Grayson liked the old 100% (gain 3) and wanted ~120% of
+ * it, so the default 0.75 now equals old 120% and the top of the slider old 160%. */
+export const JAW_GAIN = 4.8;
 const BROW_ALPHA = 0.35; // EMA per frame; blendshapes arrive unfiltered
 const JAW_ALPHA = 0.6;   // faster: speech moves quickly
 
@@ -126,7 +128,7 @@ export function boostBrows(lm: Landmark[], brows: readonly [number, number], amo
 }
 
 /** Full jaw at full boost drops the lower lip this share of the face height. */
-export const JAW_BOOST_MAX = 0.06;
+export const JAW_BOOST_MAX = 0.096; // old 0.06 * 1.6, same rescale as JAW_GAIN
 
 // Lower lip rides fully; chin a little less; jaw sides less again. Mouth corners stay put.
 const JAW_POINTS: readonly [number, number][] = [
