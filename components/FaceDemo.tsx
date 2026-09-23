@@ -11,7 +11,8 @@ import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
-import { drawPuppet } from './face/FaceMeshRenderer';
+import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
+import { MeshDetail } from './face/faceGeometry';
 import { Landmark } from './shared/trackerTypes';
 import { renderTakeToVideo } from './face/exportVideo';
 import { buildPackZip, takeStamp } from './face/exportPack';
@@ -42,6 +43,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
   const [browBoost, setBrowBoost] = useState(0.5);
   const [jawBoost, setJawBoost] = useState(0.75);
+  const [blinkBoost, setBlinkBoost] = useState(0.5);
+  const [creaseAngle, setCreaseAngle] = useState(35);
+  const [meshDetail, setMeshDetail] = useState<MeshDetail>('low');
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
   const videoAspectRef = useRef(4 / 3);
 
@@ -144,7 +148,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               // live view uses the live camera's.
               const aspect = exportFrameRef.current || recorder.isPlaying ? takeAspect() : videoAspectRef.current;
 
-              puppetStateRef.current = stepPuppetState(puppetStateRef.current, currentLandmarks, currentBlendshapesRecord, aspect);
+              puppetStateRef.current = stepPuppetState(puppetStateRef.current, currentLandmarks, currentBlendshapesRecord, aspect, blinkBoost);
 
               // Render Stylized Puppet Character
               drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, state: puppetStateRef.current }, w, h, {
@@ -153,9 +157,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   videoAspect: aspect,
                   browBoost,
                   jawBoost,
-                  blinkBoost: 0.5,
-                  creaseAngle: 35,
-                  meshDetail: 'low',
+                  blinkBoost,
+                  creaseAngle,
+                  meshDetail,
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -179,7 +183,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       render();
 
       return () => cancelAnimationFrame(animationFrameId);
-  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost, jawBoost]);
+  }, [isCameraReady, recorder.isRecording, recorder.isPlaying, showPip, showGazeRays, showMocapDots, browBoost, jawBoost, blinkBoost, creaseAngle, meshDetail]);
 
   // Exports render in real time: keep the idle auto-pause away meanwhile.
   const exporting = exportState !== null;
@@ -202,6 +206,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
       let state = INITIAL_PUPPET_STATE;
       let lastProgress = 0;
+      let exportCanvas: HTMLCanvasElement | null = null;
       const aspect = takeAspect(); // fixed for the whole export
       try {
           const audio = recorder.getAudio();
@@ -213,10 +218,11 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               height,
               signal: ctrl.signal,
               draw: (ctx, frame, w, h) => {
+                  exportCanvas = ctx.canvas as HTMLCanvasElement;
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
-                  state = stepPuppetState(state, face, frame.blendshapes, aspect);
-                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost, jawBoost, blinkBoost: 0.5, creaseAngle: 35, meshDetail: 'low' });
+                  state = stepPuppetState(state, face, frame.blendshapes, aspect, blinkBoost);
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost, jawBoost, blinkBoost, creaseAngle, meshDetail });
               },
               onProgress: (ms) => {
                   const now = performance.now();
@@ -238,6 +244,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
           exportAbortRef.current = null;
           exportFrameRef.current = null;
           setExportState(null);
+          if (exportCanvas) disposePuppet(exportCanvas);
       }
   };
 
@@ -435,6 +442,67 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
                      <span>RAW</span><span>EXAGGERATED</span>
+                 </div>
+             </div>
+
+             {/* Blink Boost (puppetState.boostBlink) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between text-[11px] text-gray-300 mb-1.5">
+                     <span className="text-gray-400">Blink Boost</span>
+                     <span className="text-white font-bold tabular-nums">{Math.round(blinkBoost * 100)}%</span>
+                 </div>
+                 <input
+                     type="range"
+                     min={0}
+                     max={1}
+                     step={0.05}
+                     value={blinkBoost}
+                     onChange={(e) => setBlinkBoost(parseFloat(e.target.value))}
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     title="How far your blinks close the puppet's lids; real blinks snap shut."
+                 />
+                 <div className="flex justify-between text-[9px] text-gray-500 mt-1">
+                     <span>RAW</span><span>EXAGGERATED</span>
+                 </div>
+             </div>
+
+             {/* Crease Angle (faceGeometry crease-angle normals) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between text-[11px] text-gray-300 mb-1.5">
+                     <span className="text-gray-400">Crease Angle</span>
+                     <span className="text-white font-bold tabular-nums">{creaseAngle}°</span>
+                 </div>
+                 <input
+                     type="range"
+                     min={0}
+                     max={90}
+                     step={5}
+                     value={creaseAngle}
+                     onChange={(e) => setCreaseAngle(parseFloat(e.target.value))}
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     title="Edges sharper than this angle stay hard; softer ones are smoothed."
+                 />
+                 <div className="flex justify-between text-[9px] text-gray-500 mt-1">
+                     <span>FACETED</span><span>SMOOTH</span>
+                 </div>
+             </div>
+
+             {/* Mesh detail (faceGeometry FACE_MESHES) */}
+             <div className="bg-[#111317] p-2.5 rounded border border-white/5">
+                 <div className="flex justify-between items-center text-[11px] text-gray-300">
+                     <span className="text-gray-400">Mesh</span>
+                     <div className="flex gap-1">
+                         {(['low', 'full'] as const).map((d) => (
+                             <button
+                                 key={d}
+                                 type="button"
+                                 onClick={() => setMeshDetail(d)}
+                                 className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${meshDetail === d ? 'bg-[#EE3B2B] text-white' : 'bg-[#22242B] text-gray-400'}`}
+                             >
+                                 {d.toUpperCase()}
+                             </button>
+                         ))}
+                     </div>
                  </div>
              </div>
 

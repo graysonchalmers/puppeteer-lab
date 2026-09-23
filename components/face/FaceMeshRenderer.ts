@@ -40,6 +40,8 @@ export interface PuppetOptions {
 }
 
 const scenes = new WeakMap<HTMLCanvasElement, PuppetScene>();
+/** Canvases whose `PuppetScene` constructor threw (no WebGL): skip retrying every frame. */
+const failedCanvases = new WeakSet<HTMLCanvasElement>();
 
 function sceneFor(canvas: HTMLCanvasElement, w: number, h: number): PuppetScene {
   let s = scenes.get(canvas);
@@ -52,6 +54,7 @@ function sceneFor(canvas: HTMLCanvasElement, w: number, h: number): PuppetScene 
 export function disposePuppet(canvas: HTMLCanvasElement) {
   scenes.get(canvas)?.dispose();
   scenes.delete(canvas);
+  failedCanvases.delete(canvas);
 }
 
 /** 2D gaze ray from the eye-contour center through the iris landmark. */
@@ -95,10 +98,21 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     eyeSource = boostJaw(boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect), frame.state, opts.jawBoost, opts.videoAspect);
     face = boostBlink(eyeSource, frame.state, opts.blinkBoost);
   }
+  const canvas = ctx.canvas as HTMLCanvasElement;
   let scene: PuppetScene;
+  if (failedCanvases.has(canvas)) {
+    ctx.fillStyle = STAGE_BG;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2);
+    return;
+  }
   try {
-    scene = sceneFor(ctx.canvas as HTMLCanvasElement, w, h);
+    scene = sceneFor(canvas, w, h);
   } catch {
+    failedCanvases.add(canvas);
     ctx.fillStyle = STAGE_BG;
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#9CA3AF';
@@ -116,9 +130,9 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
   }, p);
   ctx.drawImage(scene.canvas, 0, 0, w, h);
   if (face) {
-    if (opts.showGazeRays) {
-      drawGazeRay(ctx, face, LEFT_EYE_CONTOUR, 468, p);
-      drawGazeRay(ctx, face, RIGHT_EYE_CONTOUR, 473, p);
+    if (opts.showGazeRays && eyeSource) {
+      drawGazeRay(ctx, eyeSource, LEFT_EYE_CONTOUR, 468, p);
+      drawGazeRay(ctx, eyeSource, RIGHT_EYE_CONTOUR, 473, p);
     }
     if (opts.showMocapDots) drawMocapDots(ctx, face, p);
   }
