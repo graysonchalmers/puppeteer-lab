@@ -42,13 +42,14 @@ export interface SceneInput {
 }
 
 function addLights(scene: THREE.Scene) {
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-  const key = new THREE.DirectionalLight(0xffffff, 2.4);
-  key.position.set(-0.6, 0.7, 1);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.6);
-  fill.position.set(0.7, -0.3, 1);
-  const rim = new THREE.DirectionalLight(0xffffff, 1.6);
-  rim.position.set(0.2, 0.8, -1);
+  // Tuned on the synthetic take: low ambient + a side-ish key so the form reads.
+  scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+  const key = new THREE.DirectionalLight(0xffffff, 3.2);
+  key.position.set(-0.8, 0.6, 0.7);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.7);
+  fill.position.set(0.8, -0.2, 0.8);
+  const rim = new THREE.DirectionalLight(0xffffff, 2.5);
+  rim.position.set(0.3, 0.8, -1);
   scene.add(key, fill, rim);
 }
 
@@ -58,9 +59,9 @@ function eyeTexture(): THREE.CanvasTexture {
   const g = c.getContext('2d')!;
   g.fillStyle = '#F3F4F6'; g.fillRect(0, 0, 256, 128);
   const fx = 64, fy = 64;
-  g.beginPath(); g.ellipse(fx, fy, 22, 44, 0, 0, Math.PI * 2); g.fillStyle = '#60A5FA'; g.fill();
-  g.beginPath(); g.ellipse(fx, fy, 19, 38, 0, 0, Math.PI * 2); g.fillStyle = '#111827'; g.fill();
-  g.beginPath(); g.ellipse(fx, fy, 9, 18, 0, 0, Math.PI * 2); g.fillStyle = '#000000'; g.fill();
+  g.beginPath(); g.arc(fx, fy, 22, 0, Math.PI * 2); g.fillStyle = '#60A5FA'; g.fill();
+  g.beginPath(); g.arc(fx, fy, 19, 0, Math.PI * 2); g.fillStyle = '#111827'; g.fill();
+  g.beginPath(); g.arc(fx, fy, 9, 0, Math.PI * 2); g.fillStyle = '#000000'; g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;

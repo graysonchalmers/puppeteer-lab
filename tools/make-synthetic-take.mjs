@@ -76,9 +76,11 @@ for (let f = 0; f < FPS * SECONDS; f++) {
   // Brows up for the first half, down for the second (drives the brow boost).
   const brow = Math.sin((t / SECONDS) * Math.PI * 2);
   const up = r4(Math.max(0, brow)), down = r4(Math.max(0, -brow));
+  // Half-closed eyes around 1.2 s, a full blink around 2.5 s (drives Blink Boost).
+  const blink = t > 1.1 && t < 1.3 ? 0.5 : t > 2.4 && t < 2.6 ? 1 : 0;
   const frame = {
     timestamp: Math.round(t * 1000), faceLandmarks: pts,
-    blendshapes: { jawOpen: r4(jawOpen), browInnerUp: up, browOuterUpLeft: up, browOuterUpRight: up, browDownLeft: down, browDownRight: down },
+    blendshapes: { jawOpen: r4(jawOpen), browInnerUp: up, browOuterUpLeft: up, browOuterUpRight: up, browDownLeft: down, browDownRight: down, eyeBlinkLeft: blink, eyeBlinkRight: blink },
   };
   if (withHands) {
     const wave = Math.sin(t * Math.PI * 2) * 0.35;
