@@ -153,6 +153,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   videoAspect: aspect,
                   browBoost,
                   jawBoost,
+                  blinkBoost: 0.5,
+                  creaseAngle: 35,
+                  meshDetail: 'low',
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -213,7 +216,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   exportFrameRef.current = frame;
                   const face = frame.faceLandmarks ?? null;
                   state = stepPuppetState(state, face, frame.blendshapes, aspect);
-                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost, jawBoost });
+                  drawPuppet(ctx, { face, hands: frame.landmarks ?? [], state }, w, h, { showGazeRays, showMocapDots, videoAspect: aspect, browBoost, jawBoost, blinkBoost: 0.5, creaseAngle: 35, meshDetail: 'low' });
               },
               onProgress: (ms) => {
                   const now = performance.now();

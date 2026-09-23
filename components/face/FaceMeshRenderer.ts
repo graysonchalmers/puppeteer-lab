@@ -2,32 +2,21 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Face Puppet drawing layer: background, faceted low-poly head, stylized
- * eyes (behavior unchanged from the original renderer), mouth, overlays.
- * Pure geometry lives in lowPoly.ts / handMesh.ts; this file only draws, so
- * the same call renders the stage and the offscreen video-export canvas.
+ * Face Puppet drawing layer: Three.js scene plus 2D overlays. The scene
+ * (PuppetScene.ts) renders the shaded head, eyeballs, mouth, brows and hands
+ * into its own WebGL canvas, which is blitted into the 2D context; gaze rays
+ * and mocap dots are drawn on top. The same call renders the stage and the
+ * offscreen video-export canvas.
  */
 import { Landmark } from '../shared/trackerTypes';
-import { fitProjection, buildFaceTriangles, Projection, ShadedTri } from './lowPoly';
-import { buildHandTriangles } from './handMesh';
-import { PuppetState, boostBrows, boostJaw, teethGap } from './puppetState';
-import {
-  LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
-  LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS,
-} from './faceTopology';
+import { fitProjection, Projection } from './projection';
+import { MeshDetail } from './faceGeometry';
+import { PuppetScene } from './PuppetScene';
+import { PuppetState, boostBrows, boostJaw, boostBlink, teethGap } from './puppetState';
+import { LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS } from './faceTopology';
 
 export const STAGE_BG = '#090A0C';
 const ACCENT = '#EE3B2B';
-const CAVITY = '#0B0C0E';
-const LIP_CLOSED_FILL = '#3A3D44';
-const LIP_SEAM = '#15171B';
-const TOOTH = '#E6E4DC';
-const TOOTH_SEAM = '#8E8C85';
-const BROW = '#16181C';
-/** Tooth row height with teeth fully apart: a share of mouth width, capped to
- * a share of half the lip gap so the dark cavity always shows between rows. */
-const TOOTH_BAND = 0.08;
-const TOOTH_BAND_MAX_HALF_GAP = 0.6;
 
 export interface PuppetFrame {
   face: Landmark[] | null;
@@ -43,192 +32,49 @@ export interface PuppetOptions {
   browBoost: number;
   /** 0..1 Jaw Boost slider: parts the teeth sooner and drops the lower lip/chin. */
   jawBoost: number;
+  /** 0..1 Blink Boost slider: deeper blinks, real blinks snap shut. */
+  blinkBoost: number;
+  /** Crease Angle in degrees, 0..90. */
+  creaseAngle: number;
+  meshDetail: MeshDetail;
 }
 
-export function fillTriangles(ctx: CanvasRenderingContext2D, tris: ShadedTri[]) {
-  ctx.lineWidth = 0.75;
-  ctx.lineJoin = 'round';
-  for (const t of tris) {
-    ctx.beginPath();
-    ctx.moveTo(t.ax, t.ay);
-    ctx.lineTo(t.bx, t.by);
-    ctx.lineTo(t.cx, t.cy);
-    ctx.closePath();
-    ctx.fillStyle = t.color;
-    ctx.strokeStyle = t.color; // same-color stroke hides anti-alias seams
-    ctx.fill();
-    ctx.stroke();
-  }
+const scenes = new WeakMap<HTMLCanvasElement, PuppetScene>();
+
+function sceneFor(canvas: HTMLCanvasElement, w: number, h: number): PuppetScene {
+  let s = scenes.get(canvas);
+  if (!s) { s = new PuppetScene(w, h); scenes.set(canvas, s); }
+  if (s.canvas.width !== w || s.canvas.height !== h) s.setSize(w, h);
+  return s;
 }
 
-const tracePath = (ctx: CanvasRenderingContext2D, lm: Landmark[], idx: readonly number[], p: Projection) => {
+/** Release the WebGL context behind a canvas (call when an export finishes). */
+export function disposePuppet(canvas: HTMLCanvasElement) {
+  scenes.get(canvas)?.dispose();
+  scenes.delete(canvas);
+}
+
+/** 2D gaze ray from the eye-contour center through the iris landmark. */
+const drawGazeRay = (ctx: CanvasRenderingContext2D, lm: Landmark[], contour: readonly number[], iris: number, p: Projection) => {
+  if (!lm[iris]) return;
+  let cx = 0, cy = 0;
+  for (const i of contour) { cx += p.x(lm[i]); cy += p.y(lm[i]); }
+  cx /= contour.length; cy /= contour.length;
+  const px = p.x(lm[iris]), py = p.y(lm[iris]);
+  const m = Math.hypot(px - cx, py - cy);
+  const nx = m > 0.5 ? (px - cx) / m : 0, ny = m > 0.5 ? (py - cy) / m : 0;
   ctx.beginPath();
-  ctx.moveTo(p.x(lm[idx[0]]), p.y(lm[idx[0]]));
-  for (let i = 1; i < idx.length; i++) ctx.lineTo(p.x(lm[idx[i]]), p.y(lm[idx[i]]));
-};
-
-/** Line through the midpoints of paired upper/lower inner-lip points. */
-const strokeLipSeam = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, color: string, width: number) => {
-  ctx.beginPath();
-  ctx.moveTo(p.x(lm[78]), p.y(lm[78]));
-  for (let i = 0; i < LIPS_INNER_UPPER.length; i++) {
-    const u = lm[LIPS_INNER_UPPER[i]];
-    const l = lm[LIPS_INNER_LOWER[i]];
-    ctx.lineTo((p.x(u) + p.x(l)) / 2, (p.y(u) + p.y(l)) / 2);
-  }
-  ctx.lineTo(p.x(lm[308]), p.y(lm[308]));
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-};
-
-/** A tooth row hanging off one inner lip, `dy` pixels toward the other lip. */
-const fillToothRow = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, lip: readonly number[], dy: number) => {
-  const ring = [78, ...lip, 308];
-  ctx.beginPath();
-  ctx.moveTo(p.x(lm[ring[0]]), p.y(lm[ring[0]]));
-  for (const i of ring.slice(1)) ctx.lineTo(p.x(lm[i]), p.y(lm[i]));
-  for (const i of [...ring].reverse()) ctx.lineTo(p.x(lm[i]), p.y(lm[i]) + dy);
-  ctx.closePath();
-  ctx.fill();
-};
-
-/** Closed: lip seam. Open: tooth rows hang from each lip and part
- * continuously with `gap` (0 = touching at the bite line, 1 = fully apart). */
-const drawMouth = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection, open: boolean, gap: number) => {
-  tracePath(ctx, lm, LIPS_INNER, p);
-  ctx.closePath();
-  if (!open) {
-    ctx.fillStyle = LIP_CLOSED_FILL;
-    ctx.fill();
-    strokeLipSeam(ctx, lm, p, LIP_SEAM, 2);
-    return;
-  }
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = CAVITY;
-  ctx.fill();
-  const dist = (a: number, b: number) => Math.hypot(p.x(lm[a]) - p.x(lm[b]), p.y(lm[a]) - p.y(lm[b]));
-  const half = dist(13, 14) / 2;
-  const apartRow = Math.min(dist(78, 308) * TOOTH_BAND, half * TOOTH_BAND_MAX_HALF_GAP);
-  const row = half * (1 - gap) + apartRow * gap;
-  ctx.fillStyle = TOOTH;
-  fillToothRow(ctx, lm, p, LIPS_INNER_UPPER, row);
-  fillToothRow(ctx, lm, p, LIPS_INNER_LOWER, -row);
-  if (gap < 0.1) strokeLipSeam(ctx, lm, p, TOOTH_SEAM, 1.5);
-  ctx.restore();
-};
-
-/** Flat stylized brow: the landmark brow band (upper row out, lower row back). */
-const drawBrow = (ctx: CanvasRenderingContext2D, lm: Landmark[], idx: readonly number[], p: Projection) => {
-  tracePath(ctx, lm, idx, p);
-  ctx.closePath();
-  ctx.fillStyle = BROW;
-  ctx.strokeStyle = BROW;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.fill();
-  ctx.stroke();
-};
-
-/** The original stylized eye, unchanged apart from taking the projection. */
-const renderStylizedEye = (
-  ctx: CanvasRenderingContext2D,
-  landmarks: Landmark[],
-  contourIndices: readonly number[],
-  irisIndex: number,
-  p: Projection,
-  showGazeRays: boolean
-) => {
-  const getX = p.x;
-  const getY = p.y;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  let avgX = 0, avgY = 0;
-  for (const idx of contourIndices) {
-    const px = getX(landmarks[idx]);
-    const py = getY(landmarks[idx]);
-    minX = Math.min(minX, px);
-    maxX = Math.max(maxX, px);
-    minY = Math.min(minY, py);
-    maxY = Math.max(maxY, py);
-    avgX += px;
-    avgY += py;
-  }
-  avgX /= contourIndices.length;
-  avgY /= contourIndices.length;
-
-  const eyeWidth = maxX - minX;
-  const eyeHeight = maxY - minY;
-  const blinkRatio = eyeHeight / Math.max(eyeWidth, 1);
-
-  tracePath(ctx, landmarks, contourIndices, p);
-  ctx.closePath();
-
-  if (blinkRatio < 0.15) {
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    return;
-  }
-
-  ctx.fillStyle = '#F3F4F6';
-  ctx.fill();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + nx * 45, py + ny * 45);
+  ctx.strokeStyle = ACCENT;
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = '#4B5563';
+  ctx.setLineDash([3, 3]);
   ctx.stroke();
-
-  let pupilX = avgX;
-  let pupilY = avgY;
-  if (landmarks[irisIndex]) {
-    pupilX = getX(landmarks[irisIndex]);
-    pupilY = getY(landmarks[irisIndex]);
-  }
-  pupilX = Math.max(minX + eyeWidth * 0.2, Math.min(maxX - eyeWidth * 0.2, pupilX));
-  pupilY = Math.max(minY + eyeHeight * 0.2, Math.min(maxY - eyeHeight * 0.2, pupilY));
-
-  const irisRadius = Math.min(eyeHeight * 0.45, eyeWidth * 0.26);
-
+  ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.arc(pupilX, pupilY, Math.max(4, irisRadius), 0, Math.PI * 2);
-  ctx.fillStyle = '#111827';
+  ctx.arc(px + nx * 45, py + ny * 45, 2, 0, Math.PI * 2);
+  ctx.fillStyle = ACCENT;
   ctx.fill();
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = '#60A5FA';
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(pupilX, pupilY, Math.max(2, irisRadius * 0.5), 0, Math.PI * 2);
-  ctx.fillStyle = '#000000';
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(pupilX - irisRadius * 0.35, pupilY - irisRadius * 0.35, Math.max(1.5, irisRadius * 0.25), 0, Math.PI * 2);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fill();
-
-  if (showGazeRays) {
-    const gazeDx = pupilX - avgX;
-    const gazeDy = pupilY - avgY;
-    const rayLen = 45;
-    const gazeMagnitude = Math.hypot(gazeDx, gazeDy);
-    const nx = gazeMagnitude > 0.5 ? gazeDx / gazeMagnitude : 0;
-    const ny = gazeMagnitude > 0.5 ? gazeDy / gazeMagnitude : 0;
-
-    ctx.beginPath();
-    ctx.moveTo(pupilX, pupilY);
-    ctx.lineTo(pupilX + nx * rayLen, pupilY + ny * rayLen);
-    ctx.strokeStyle = ACCENT;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.beginPath();
-    ctx.arc(pupilX + nx * rayLen, pupilY + ny * rayLen, 2, 0, Math.PI * 2);
-    ctx.fillStyle = ACCENT;
-    ctx.fill();
-  }
 };
 
 const drawMocapDots = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Projection) => {
@@ -241,37 +87,39 @@ const drawMocapDots = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Project
   }
 };
 
-export function drawPuppet(
-  ctx: CanvasRenderingContext2D,
-  frame: PuppetFrame,
-  w: number,
-  h: number,
-  opts: PuppetOptions
-) {
-  ctx.save();
-  ctx.fillStyle = STAGE_BG;
-  ctx.fillRect(0, 0, w, h);
-
+export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w: number, h: number, opts: PuppetOptions) {
   const p = fitProjection(w, h, opts.videoAspect);
+  let face: Landmark[] | null = null;
+  let eyeSource: Landmark[] | null = null;
   if (frame.face && frame.face.length >= 468) {
-    const face = boostJaw(
-      boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect),
-      frame.state, opts.jawBoost, opts.videoAspect
-    );
-    fillTriangles(ctx, buildFaceTriangles(face, p));
-    drawBrow(ctx, face, LEFT_EYEBROW, p);
-    drawBrow(ctx, face, RIGHT_EYEBROW, p);
-    drawMouth(ctx, face, p, frame.state.mouthOpen, teethGap(frame.state, opts.jawBoost));
-    // MediaPipe iris centers: 468 sits in the 33..133 eye, 473 in the 263..362 eye.
-    renderStylizedEye(ctx, face, LEFT_EYE_CONTOUR, 468, p, opts.showGazeRays);
-    renderStylizedEye(ctx, face, RIGHT_EYE_CONTOUR, 473, p, opts.showGazeRays);
+    eyeSource = boostJaw(boostBrows(frame.face, frame.state.brows, opts.browBoost, opts.videoAspect), frame.state, opts.jawBoost, opts.videoAspect);
+    face = boostBlink(eyeSource, frame.state, opts.blinkBoost);
+  }
+  let scene: PuppetScene;
+  try {
+    scene = sceneFor(ctx.canvas as HTMLCanvasElement, w, h);
+  } catch {
+    ctx.fillStyle = STAGE_BG;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2);
+    return;
+  }
+  scene.render({
+    face, eyeSource, hands: frame.hands,
+    mouthOpen: frame.state.mouthOpen,
+    teethGap: teethGap(frame.state, opts.jawBoost),
+    creaseAngle: opts.creaseAngle,
+    meshDetail: opts.meshDetail,
+  }, p);
+  ctx.drawImage(scene.canvas, 0, 0, w, h);
+  if (face) {
+    if (opts.showGazeRays) {
+      drawGazeRay(ctx, face, LEFT_EYE_CONTOUR, 468, p);
+      drawGazeRay(ctx, face, RIGHT_EYE_CONTOUR, 473, p);
+    }
     if (opts.showMocapDots) drawMocapDots(ctx, face, p);
   }
-
-  // Hands always in front of the face (you gesture in front of yourself).
-  for (const hand of frame.hands) {
-    if (hand && hand.length >= 21) fillTriangles(ctx, buildHandTriangles(hand, p));
-  }
-
-  ctx.restore();
 }
