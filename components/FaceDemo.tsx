@@ -192,6 +192,14 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   // Leaving the demo mid-export cancels it (releases the recorder, audio graph and stream).
   useEffect(() => () => exportAbortRef.current?.abort(), []);
 
+  // Leaving the demo releases the stage's WebGL context (ref captured per React's
+  // ref-in-cleanup guidance: the ref may be cleared by the time cleanup runs).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    return () => disposePuppet(canvas);
+  }, []);
+
   const runExport = async (kind: 'video' | 'pack') => {
       const stage = canvasRef.current;
       if (!recorder.hasData || !stage || exportAbortRef.current || recorder.isRecording) return;

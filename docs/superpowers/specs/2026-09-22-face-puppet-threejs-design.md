@@ -157,4 +157,4 @@ Blink, Crease and Mesh pass through `PuppetOptions`, like the existing boosts.
 
 - **Eyeball poking through the face** at extreme head turns. Mitigation: set-back and radius tuned conservatively; tested with the synthetic take's ±12° yaw.
 - **Full mesh cost on low-end GPUs.** It is about 900 triangles, trivial for WebGL. The Low toggle stays as a fallback either way.
-- **The video export now depends on WebGL.** A lost context mid-export surfaces through the existing `draw`-throws path in `exportVideo.ts` (it aborts cleanly).
+- **The video export now depends on WebGL.** three.js does not throw on a lost context — it silently renders nothing — so a context lost mid-export would record black frames rather than aborting through `exportVideo.ts`'s `draw`-throws path; on a WebGL-less browser the export instead records the fallback text, since `drawPuppet` draws that to the 2D canvas without throwing. Accepted as a rare risk, not mitigated.

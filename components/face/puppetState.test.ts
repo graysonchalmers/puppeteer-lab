@@ -192,6 +192,30 @@ describe('blink', () => {
   });
 });
 
+describe('apertureBlink (fallback blink, no blendshapes)', () => {
+  it('gives the same fallback blink for the same physical eye opening at different aspects', () => {
+    // x is normalized-width units, y is normalized-height units: to hold the
+    // PHYSICAL (pixel-true) eye box constant across aspects, x must shrink as
+    // aspect grows, same correction mouthOpenRatio applies to mouth width.
+    const eyeFace = (dxNorm: number, dyNorm: number): Landmark[] => {
+      const lm = face(0.02);
+      lm[33] = { x: 0.5 - dxNorm / 2, y: 0.5, z: 0 };
+      lm[133] = { x: 0.5 + dxNorm / 2, y: 0.5, z: 0 };
+      lm[159] = { x: 0.5, y: 0.5 - dyNorm / 2, z: 0 };
+      lm[145] = { x: 0.5, y: 0.5 + dyNorm / 2, z: 0 };
+      return lm;
+    };
+    const physWidth = 0.3, physHeight = 0.06; // constant physical eye box, in height units
+    const aspectA = 4 / 3, aspectB = 16 / 9;
+    const lmA = eyeFace(physWidth / aspectA, physHeight);
+    const lmB = eyeFace(physWidth / aspectB, physHeight);
+    const sA = stepPuppetState(INITIAL_PUPPET_STATE, lmA, {}, aspectA);
+    const sB = stepPuppetState(INITIAL_PUPPET_STATE, lmB, {}, aspectB);
+    expect(sA.blinks[0]).toBeGreaterThan(0);
+    expect(sA.blinks[0]).toBeCloseTo(sB.blinks[0], 6);
+  });
+});
+
 describe('boostBlink', () => {
   const lidFace = (): Landmark[] => {
     const lm = face();

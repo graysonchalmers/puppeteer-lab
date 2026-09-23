@@ -91,6 +91,7 @@ const drawMocapDots = (ctx: CanvasRenderingContext2D, lm: Landmark[], p: Project
 };
 
 export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w: number, h: number, opts: PuppetOptions) {
+  if (w <= 0 || h <= 0) return;
   const p = fitProjection(w, h, opts.videoAspect);
   let face: Landmark[] | null = null;
   let eyeSource: Landmark[] | null = null;
@@ -106,7 +107,7 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     ctx.fillStyle = '#9CA3AF';
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2);
+    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2 - 20);
     return;
   }
   try {
@@ -118,7 +119,7 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     ctx.fillStyle = '#9CA3AF';
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2);
+    ctx.fillText('WEBGL UNAVAILABLE: THE PUPPET NEEDS A WEBGL-CAPABLE BROWSER', w / 2, h / 2 - 20);
     return;
   }
   scene.render({

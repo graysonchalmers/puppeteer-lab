@@ -65,14 +65,16 @@ export const BLINK_SNAP_OPEN = 0.6;
 export const LID_MEET = 0.2;
 const BLINK_ALPHA = 0.7; // light: quick blinks must survive
 
-/** Lid aperture fallback for takes without blendshapes: 0 open .. 1 shut. */
-function apertureBlink(lm: Landmark[], contour: readonly number[]): number {
+/** Lid aperture fallback for takes without blendshapes: 0 open .. 1 shut.
+ * x is normalized-width units and y is normalized-height units, so x is
+ * scaled by videoAspect to measure both in height units, like mouthOpenRatio. */
+function apertureBlink(lm: Landmark[], contour: readonly number[], videoAspect: number): number {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const i of contour) {
     minX = Math.min(minX, lm[i].x); maxX = Math.max(maxX, lm[i].x);
     minY = Math.min(minY, lm[i].y); maxY = Math.max(maxY, lm[i].y);
   }
-  const ratio = (maxY - minY) / Math.max(maxX - minX, 1e-6);
+  const ratio = (maxY - minY) / Math.max((maxX - minX) * videoAspect, 1e-6);
   return Math.max(0, Math.min(1, (0.28 - ratio) / 0.2));
 }
 
@@ -97,7 +99,7 @@ export function stepPuppetState(
   const [a, b] = BLENDSHAPE_SIDES_SWAPPED ? ['Left', 'Right'] as const : ['Right', 'Left'] as const;
   const ema = (p: number, t: number, k = BROW_ALPHA) => p + (t - p) * k;
   const rawBlink = (side: 'Left' | 'Right', contour: readonly number[]) =>
-    bs && bs[`eyeBlink${side}`] !== undefined ? bs[`eyeBlink${side}`] : apertureBlink(lm, contour);
+    bs && bs[`eyeBlink${side}`] !== undefined ? bs[`eyeBlink${side}`] : apertureBlink(lm, contour, videoAspect);
   const blinks: [number, number] = [
     ema(prev.blinks[0], rawBlink(a, LEFT_EYE_CONTOUR), BLINK_ALPHA),
     ema(prev.blinks[1], rawBlink(b, RIGHT_EYE_CONTOUR), BLINK_ALPHA),
