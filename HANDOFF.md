@@ -10,7 +10,7 @@ Everything committed, pushed, and deployed; tree clean. Waiting on Grayson's rea
 
 ## ▶️ Next concrete step
 **Host-verify Face Puppet on the live site (real Chrome, camera + mic):**
-0. **Teeth, brows, Jaw Boost (2026-09-22 follow-ups, live at `8430d07`, stamp `🔑 ERUPT · 8430d0`):** brow sides verified on camera and fixed (`BROW_SIDES_SWAPPED = true`). Teeth now part continuously (`teethGap` in `components/face/puppetState.ts`: `JAW_REST` / `JAW_FULL` / `JAW_GAIN`), and the Jaw Boost slider makes them part sooner and drops the lower lip and chin. Tune the Jaw Boost and Brow Boost defaults (both 0.5) on camera while talking. Head is trimmed to 191 verts / 298 tris.
+0. **Three.js puppet (2026-09-22, live at `3f7fae5`, stamp `🌈 ISLAND · 3f7fae`; spec `docs/superpowers/specs/2026-09-22-face-puppet-threejs-design.md`):** on camera, pick Mesh LOW vs FULL, a Crease Angle (default 35°), and Blink/Brow/Jaw Boost defaults (0.5/0.5/0.75). Check that blinks close fully and squints stay partial, that the eyeballs never poke through at strong head turns (a near-profile may show a dark sliver from the per-triangle normal flip, `faceGeometry.ts`), and that face + hands holds 30 fps. Idle auto-pause (60 s, `components/shared/idle.ts`) also needs a webcam-light check on resume. Earlier follow-ups (brow sides verified, teeth part continuously, Jaw Boost) are live too.
 1. Mouth: no flicker at the open/close boundary; closed shows a seam. Retune `MOUTH_OPEN_ABOVE` / `MOUTH_CLOSE_BELOW` (`components/face/mouthState.ts`) if needed.
 2. Face Smoothing slider: LIGHT jitters a little, HEAVY lags a little, default feels calm.
 3. Face + hands loop holds 30 fps or better; hands keep moving when a hand covers the face.
