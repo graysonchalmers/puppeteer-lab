@@ -7,8 +7,9 @@ import { Landmark } from '../shared/trackerTypes';
 import {
   INITIAL_PUPPET_STATE, stepPuppetState, browLift, boostBrows, BROW_BOOST_MAX,
   BROW_DOWN_SCALE, teethGap, boostJaw, JAW_BOOST_MAX, JAW_REST, JAW_FULL, JAW_GAIN,
+  eyeClosure, boostBlink, BLINK_GAIN, LID_MEET,
 } from './puppetState';
-import { LEFT_EYEBROW, RIGHT_EYEBROW, LEFT_EYE_CONTOUR } from './faceTopology';
+import { LEFT_EYEBROW, RIGHT_EYEBROW, LEFT_EYE_CONTOUR, LEFT_EYE_LID_PAIRS, RIGHT_EYE_LID_PAIRS } from './faceTopology';
 
 /** 478 points; chin 152 at y=0.8, forehead 10 at y=0.2; lip gap `gap` over width 0.2. */
 const face = (gap = 0): Landmark[] => {
@@ -153,5 +154,68 @@ describe('boostBrows', () => {
     const i = LEFT_EYEBROW[0];
     expect(out[i].y).toBeCloseTo(0.5);
     expect((out[i].x - 0.5) * aspect).toBeCloseTo(0.4 * BROW_BOOST_MAX);
+  });
+});
+
+describe('blink', () => {
+  const blinkBs = (l: number, r: number) => ({ eyeBlinkLeft: l, eyeBlinkRight: r });
+  const settle = (bs: Record<string, number>, boost = 0.5) => {
+    let s = INITIAL_PUPPET_STATE;
+    for (let i = 0; i < 30; i++) s = stepPuppetState(s, face(), bs, 1, boost);
+    return s;
+  };
+
+  it('maps eyeBlinkLeft to the LEFT_EYE_CONTOUR eye (same verified sides as the brows)', () => {
+    const s = settle(blinkBs(1, 0));
+    expect(s.blinks[0]).toBeCloseTo(1, 2);
+    expect(s.blinks[1]).toBeCloseTo(0, 2);
+  });
+
+  it('boosts closure and snaps a real blink fully shut', () => {
+    const s = settle(blinkBs(0.6, 0.6)); // 0.6 * (1 + 0.5 * BLINK_GAIN) = 0.9 > snap
+    expect(s.lidsShut).toEqual([true, true]);
+    expect(eyeClosure(s, 0, 0.5)).toBe(1);
+  });
+
+  it('leaves a squint partial', () => {
+    const s = settle(blinkBs(0.3, 0.3));
+    expect(s.lidsShut).toEqual([false, false]);
+    expect(eyeClosure(s, 0, 0.5)).toBeCloseTo(0.3 * (1 + 0.5 * BLINK_GAIN), 2);
+  });
+
+  it('holds shut until closure drops below the release threshold', () => {
+    let s = settle(blinkBs(0.6, 0.6));
+    for (let i = 0; i < 30; i++) s = stepPuppetState(s, face(), blinkBs(0.45, 0.45), 1, 0.5); // 0.675: between 0.6 and 0.8
+    expect(s.lidsShut[0]).toBe(true);
+    for (let i = 0; i < 30; i++) s = stepPuppetState(s, face(), blinkBs(0.2, 0.2), 1, 0.5);
+    expect(s.lidsShut[0]).toBe(false);
+  });
+});
+
+describe('boostBlink', () => {
+  const lidFace = (): Landmark[] => {
+    const lm = face();
+    for (const [u, l] of [...LEFT_EYE_LID_PAIRS, ...RIGHT_EYE_LID_PAIRS]) {
+      lm[u] = { x: 0.5, y: 0.40, z: 0 };
+      lm[l] = { x: 0.5, y: 0.45, z: 0 };
+    }
+    return lm;
+  };
+  const shut = { ...INITIAL_PUPPET_STATE, lidsShut: [true, true] as [boolean, boolean] };
+
+  it('closes both lids to the meeting line when shut, never mutating', () => {
+    const lm = lidFace();
+    const before = JSON.stringify(lm);
+    const out = boostBlink(lm, shut, 0.5);
+    expect(JSON.stringify(lm)).toBe(before);
+    const [u, l] = LEFT_EYE_LID_PAIRS[3];
+    const meet = 0.45 + (0.40 - 0.45) * LID_MEET;
+    expect(out[u].y).toBeCloseTo(meet);
+    expect(out[l].y).toBeCloseTo(meet);
+  });
+
+  it('returns the input untouched with eyes open', () => {
+    const lm = lidFace();
+    expect(boostBlink(lm, INITIAL_PUPPET_STATE, 0.5)).toBe(lm);
   });
 });

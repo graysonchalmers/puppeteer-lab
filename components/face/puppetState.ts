@@ -11,7 +11,10 @@
  */
 import { Landmark } from '../shared/trackerTypes';
 import { mouthOpenRatio, nextMouthOpen } from './mouthState';
-import { LEFT_EYEBROW, RIGHT_EYEBROW } from './faceTopology';
+import {
+  LEFT_EYEBROW, RIGHT_EYEBROW, LEFT_EYE_LID_PAIRS, RIGHT_EYE_LID_PAIRS,
+  LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR,
+} from './faceTopology';
 
 export interface PuppetState {
   mouthOpen: boolean;
@@ -19,9 +22,15 @@ export interface PuppetState {
   jaw: number;
   /** Smoothed lift, -1 (down) .. 1 (up), for [LEFT_EYEBROW, RIGHT_EYEBROW]. */
   brows: [number, number];
+  /** Smoothed raw blink 0..1 for [LEFT_EYE_CONTOUR eye, RIGHT_EYE_CONTOUR eye]. */
+  blinks: [number, number];
+  /** Snapped shut (hysteresis on the boosted closure). */
+  lidsShut: [boolean, boolean];
 }
 
-export const INITIAL_PUPPET_STATE: PuppetState = { mouthOpen: false, jaw: 0, brows: [0, 0] };
+export const INITIAL_PUPPET_STATE: PuppetState = {
+  mouthOpen: false, jaw: 0, brows: [0, 0], blinks: [0, 0], lidsShut: [false, false],
+};
 
 // Teeth part continuously: boosted jaw at JAW_REST = touching, JAW_FULL = fully apart.
 export const JAW_REST = 0.04;
@@ -37,8 +46,8 @@ const JAW_ALPHA = 0.6;   // faster: speech moves quickly
 /** LEFT_EYEBROW (70..46) sits over the 33..133 eye, the subject's right, but
  * MediaPipe's brow blendshapes name sides by image position, not the subject:
  * verified on a real face 2026-09-22 (raising one brow lifted the other puppet
- * brow until this was flipped). */
-export const BROW_SIDES_SWAPPED = true;
+ * brow until this was flipped). Applies to brows AND blinks (eyeBlinkLeft/Right). */
+export const BLENDSHAPE_SIDES_SWAPPED = true;
 
 type Blend = Record<string, number> | undefined;
 
@@ -49,23 +58,60 @@ export function browLift(bs: Blend, side: 'Left' | 'Right'): number {
   return Math.max(-1, Math.min(1, up - g(`browDown${side}`)));
 }
 
+export const BLINK_GAIN = 1;
+export const BLINK_SNAP_CLOSE = 0.8;
+export const BLINK_SNAP_OPEN = 0.6;
+/** Closed lids meet this share of the way up from the lower lid. */
+export const LID_MEET = 0.2;
+const BLINK_ALPHA = 0.7; // light: quick blinks must survive
+
+/** Lid aperture fallback for takes without blendshapes: 0 open .. 1 shut. */
+function apertureBlink(lm: Landmark[], contour: readonly number[]): number {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const i of contour) {
+    minX = Math.min(minX, lm[i].x); maxX = Math.max(maxX, lm[i].x);
+    minY = Math.min(minY, lm[i].y); maxY = Math.max(maxY, lm[i].y);
+  }
+  const ratio = (maxY - minY) / Math.max(maxX - minX, 1e-6);
+  return Math.max(0, Math.min(1, (0.28 - ratio) / 0.2));
+}
+
+const boostedBlink = (raw: number, blinkBoost: number) => Math.min(1, raw * (1 + blinkBoost * BLINK_GAIN));
+
+export function eyeClosure(state: PuppetState, side: 0 | 1, blinkBoost: number): number {
+  return state.lidsShut[side] ? 1 : boostedBlink(state.blinks[side], blinkBoost);
+}
+
 export function stepPuppetState(
   prev: PuppetState,
   lm: Landmark[] | null | undefined,
   bs: Blend,
-  videoAspect: number
+  videoAspect: number,
+  blinkBoost = 0.5
 ): PuppetState {
   if (!lm) return prev;
   const ratio = mouthOpenRatio(lm, videoAspect);
   const mouthOpen = nextMouthOpen(prev.mouthOpen, ratio);
   // No blendshapes (old takes): estimate the jaw from the lip gap.
   const jaw = bs?.jawOpen ?? Math.max(0, Math.min(1, (ratio - 0.05) * 1.5));
-  const [a, b] = BROW_SIDES_SWAPPED ? ['Left', 'Right'] as const : ['Right', 'Left'] as const;
+  const [a, b] = BLENDSHAPE_SIDES_SWAPPED ? ['Left', 'Right'] as const : ['Right', 'Left'] as const;
   const ema = (p: number, t: number, k = BROW_ALPHA) => p + (t - p) * k;
+  const rawBlink = (side: 'Left' | 'Right', contour: readonly number[]) =>
+    bs && bs[`eyeBlink${side}`] !== undefined ? bs[`eyeBlink${side}`] : apertureBlink(lm, contour);
+  const blinks: [number, number] = [
+    ema(prev.blinks[0], rawBlink(a, LEFT_EYE_CONTOUR), BLINK_ALPHA),
+    ema(prev.blinks[1], rawBlink(b, RIGHT_EYE_CONTOUR), BLINK_ALPHA),
+  ];
+  const shut = (s: 0 | 1): boolean => {
+    const c = boostedBlink(blinks[s], blinkBoost);
+    return prev.lidsShut[s] ? c >= BLINK_SNAP_OPEN : c > BLINK_SNAP_CLOSE;
+  };
   return {
     mouthOpen,
     jaw: ema(prev.jaw, jaw, JAW_ALPHA),
     brows: [ema(prev.brows[0], browLift(bs, a)), ema(prev.brows[1], browLift(bs, b))],
+    blinks,
+    lidsShut: [shut(0), shut(1)],
   };
 }
 
@@ -148,5 +194,25 @@ export function boostJaw(lm: Landmark[], state: PuppetState, amount: number, vid
   const out = lm.slice();
   const d = -Math.min(1, state.jaw) * amount * JAW_BOOST_MAX;
   for (const [i, w] of JAW_POINTS) nudge(out, lm, i, d * w, ax, videoAspect);
+  return out;
+}
+
+/** Copy of `lm` with each eye's upper and lower lids drawn toward their meeting
+ * line by eyeClosure. Returns `lm` itself when both eyes are open. */
+export function boostBlink(lm: Landmark[], state: PuppetState, blinkBoost: number): Landmark[] {
+  const closure = [eyeClosure(state, 0, blinkBoost), eyeClosure(state, 1, blinkBoost)];
+  if (closure[0] <= 0 && closure[1] <= 0) return lm;
+  const out = lm.slice();
+  [LEFT_EYE_LID_PAIRS, RIGHT_EYE_LID_PAIRS].forEach((pairs, s) => {
+    const k = closure[s];
+    if (k <= 0) return;
+    for (const [u, l] of pairs) {
+      const U = lm[u], L = lm[l];
+      if (!U || !L) continue;
+      const mx = L.x + (U.x - L.x) * LID_MEET, my = L.y + (U.y - L.y) * LID_MEET, mz = L.z + (U.z - L.z) * LID_MEET;
+      out[u] = { ...U, x: U.x + (mx - U.x) * k, y: U.y + (my - U.y) * k, z: U.z + (mz - U.z) * k };
+      out[l] = { ...L, x: L.x + (mx - L.x) * k, y: L.y + (my - L.y) * k, z: L.z + (mz - L.z) * k };
+    }
+  });
   return out;
 }
