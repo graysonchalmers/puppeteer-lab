@@ -9,41 +9,10 @@
  */
 import { Landmark } from '../shared/trackerTypes';
 import { FACE_TRIS, FACE_TRI_IS_LIP } from './faceTopology';
+import { Projection } from './projection';
 
-export interface Projection {
-  x(lm: Landmark): number;
-  y(lm: Landmark): number;
-  z(lm: Landmark): number;
-  drawW: number;
-  drawH: number;
-  offsetX: number;
-  offsetY: number;
-}
-
-/** Fit the camera frame (videoAspect = width / height) inside the stage without
- * stretching, centered. X is mirrored so the puppet moves like a mirror. */
-export function fitProjection(w: number, h: number, videoAspect: number): Projection {
-  let drawW: number;
-  let drawH: number;
-  if (w / h > videoAspect) {
-    drawH = h;
-    drawW = h * videoAspect;
-  } else {
-    drawW = w;
-    drawH = w / videoAspect;
-  }
-  const offsetX = (w - drawW) / 2;
-  const offsetY = (h - drawH) / 2;
-  return {
-    x: (lm) => offsetX + (1 - lm.x) * drawW,
-    y: (lm) => offsetY + lm.y * drawH,
-    z: (lm) => lm.z * drawW,
-    drawW,
-    drawH,
-    offsetX,
-    offsetY,
-  };
-}
+export { fitProjection } from './projection';
+export type { Projection } from './projection';
 
 const norm = (x: number, y: number, z: number): [number, number, number] => {
   const m = Math.hypot(x, y, z);
