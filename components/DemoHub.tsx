@@ -192,9 +192,7 @@ const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
       {/* Clean, Transparent Compact Header */}
       <header className="relative z-10 w-full shrink-0 border-b border-white/10 bg-[#090A0C]/80 backdrop-blur-md px-4 sm:px-6 py-2.5 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/15 to-white/5 border border-white/20 flex items-center justify-center text-white font-mono font-bold text-xs tracking-wider shadow-inner">
-            PL
-          </div>
+          <img src="/mark-24.svg" width={24} height={24} alt="" aria-hidden="true" className="shrink-0" style={{ imageRendering: 'pixelated' }} />
           <div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight text-white font-mono flex items-center gap-1.5 leading-none">
               PUPPETEER LAB
