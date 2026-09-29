@@ -369,7 +369,7 @@ describe('audio.offsetMs and capture.video (export lip-sync and aspect)', () => 
 });
 
 describe('performance (TDD-002 P1 gate)', () => {
-  it('builds and serializes a synthetic 30s hand take (~1800 frames x 2 hands x 21 landmarks) in under 100ms', () => {
+  it('builds and serializes a synthetic 30s hand take (~1800 frames x 2 hands x 21 landmarks) in under 100ms (median of 7 runs)', () => {
     const frameCount = 1800;
     const frames: FrameData[] = new Array(frameCount);
     for (let i = 0; i < frameCount; i++) {
@@ -379,13 +379,24 @@ describe('performance (TDD-002 P1 gate)', () => {
       };
     }
 
-    const start = performance.now();
-    const envelope = buildEnvelope(frames, 'HAND', { durationMs: (frameCount * 1000) / 60 });
-    const json = serializeV3(envelope);
-    const elapsed = performance.now() - start;
+    // Wall-clock on a shared box: one run can be stretched by other vitest
+    // workers (seen at 100-111ms in a full parallel run vs. well under 100ms
+    // alone). The median of several runs ignores those one-off stalls while a
+    // real regression slows every run and still trips the same 100ms budget.
+    const runs = 7;
+    const timings: number[] = [];
+    let jsonLength = 0;
+    for (let r = 0; r < runs; r++) {
+      const start = performance.now();
+      const envelope = buildEnvelope(frames, 'HAND', { durationMs: (frameCount * 1000) / 60 });
+      jsonLength = serializeV3(envelope).length;
+      timings.push(performance.now() - start);
+    }
+    timings.sort((a, b) => a - b);
+    const median = timings[Math.floor(runs / 2)];
 
-    expect(json.length).toBeGreaterThan(0);
-    expect(elapsed).toBeLessThan(100);
+    expect(jsonLength).toBeGreaterThan(0);
+    expect(median).toBeLessThan(100);
   });
 });
 
