@@ -4,11 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2, X } from 'lucide-react';
 import { useTracker } from '../hooks/useTracker';
 import { useIsPhone } from '../hooks/useIsPhone';
 import PhoneBar from './PhoneBar';
+import DebugReadout from './DebugReadout';
+import { pipDims } from './face/pipSize';
+import { createFpsMeter } from './shared/fpsMeter';
+import { Facing } from '../hooks/cameraSupport';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
 import { useRecorder } from '../hooks/useRecorder';
@@ -42,7 +46,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
-  const { frameRef, isReady: isCameraReady, error } = useTracker(videoRef, { hands: true, face: true, faceSmoothing });
+  const [facing, setFacing] = useState<Facing>('user');
+  const { frameRef, isReady: isCameraReady, error, retry, activeFacing, canFlip, delegate, statsRef } =
+    useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing });
   const [browBoost, setBrowBoost] = useState(0.5);
   const [jawBoost, setJawBoost] = useState(0.75);
   const [blinkBoost, setBlinkBoost] = useState(0.5);
@@ -62,6 +68,29 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const isPhone = useIsPhone();
   const [controlsOpen, setControlsOpen] = useState(false);
 
+  // Read by the render loop (its effect does not re-run when these change).
+  const activeFacingRef = useRef<Facing>('user');
+  activeFacingRef.current = activeFacing;
+  const isPhoneRef = useRef(false);
+  isPhoneRef.current = isPhone;
+  // Initial PiP size (before the camera reports its aspect), so it is not a default 300x150 canvas.
+  const pipInitRef = useRef(pipDims(4 / 3, isPhone ? 112 : 192));
+  const renderMeterRef = useRef(createFpsMeter());
+  const renderFpsRef = useRef(0);
+
+  const debug = useMemo(() => new URLSearchParams(window.location.search).has('debug'), []);
+  const debugLine = useCallback(() => {
+    const v = videoRef.current;
+    return [
+      `render ${renderFpsRef.current.toFixed(0)} fps`,
+      `track ${statsRef.current.trackFps.toFixed(0)} fps`,
+      statsRef.current.delegate ?? 'no-delegate',
+      v ? `${v.videoWidth}x${v.videoHeight}` : 'no-video',
+      activeFacingRef.current === 'environment' ? 'rear' : 'front',
+      `dpr ${window.devicePixelRatio}`,
+    ].join(' | ');
+  }, [statsRef]);
+
   const [exportState, setExportState] = useState<{ kind: 'video' | 'pack'; ms: number } | null>(null);
   const exportAbortRef = useRef<AbortController | null>(null);
   const exportFrameRef = useRef<FrameData | null>(null);
@@ -80,6 +109,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       const render = () => {
           const canvas = canvasRef.current;
           const video = videoRef.current;
+
+          renderFpsRef.current = renderMeterRef.current.tick(performance.now());
 
           if (canvas && ctx) {
               // Set responsive resolution
@@ -136,14 +167,20 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   // Render PiP Webcam canvas if enabled
                   if (showPip && pipCanvasRef.current && pipCtx) {
                       const pipC = pipCanvasRef.current;
-                      if (pipC.width !== 192 || pipC.height !== 128) {
-                          pipC.width = 192;
-                          pipC.height = 128;
+                      const { w: pw, h: ph } = pipDims(videoAspectRef.current, isPhoneRef.current ? 112 : 192);
+                      if (pipC.width !== pw || pipC.height !== ph) {
+                          pipC.width = pw;
+                          pipC.height = ph;
+                          pipC.style.width = `${pw}px`;
+                          pipC.style.height = `${ph}px`;
                       }
                       pipCtx.save();
-                      pipCtx.scale(-1, 1);
-                      pipCtx.translate(-192, 0);
-                      pipCtx.drawImage(video, 0, 0, 192, 128);
+                      // The front camera is shown as a mirror; the rear camera as a window.
+                      if (activeFacingRef.current === 'user') {
+                          pipCtx.scale(-1, 1);
+                          pipCtx.translate(-pw, 0);
+                      }
+                      pipCtx.drawImage(video, 0, 0, pw, ph);
                       pipCtx.restore();
                   }
               }
@@ -335,19 +372,29 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
       {/* Main Canvas View */}
       <div className="flex-1 min-h-0 mb-16 md:mb-0 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
-          {!isCameraReady && !recorder.isPlaying && (
+          {!isCameraReady && !recorder.isPlaying && !error && (
               <div className="text-white/70 animate-pulse flex flex-col items-center">
                   <ScanFace size={40} className="mb-3 text-[#EE3B2B]" />
                   <p className="font-mono text-xs tracking-wider">INITIALIZING 478-POINT FACIAL MATRIX...</p>
               </div>
           )}
-          {error && <p className="text-[#EE3B2B] font-mono text-xs">{error}</p>}
+          {error && (
+              <div className="absolute inset-x-4 top-20 md:top-16 z-40 mx-auto max-w-md pointer-events-auto flex flex-col items-center gap-3 bg-[#111317]/95 border border-[#EE3B2B]/40 rounded-lg p-4 text-center">
+                  <p className="text-[#EE3B2B] font-mono text-xs leading-relaxed">{error}</p>
+                  <button onClick={retry} className="min-h-[44px] px-6 rounded-lg bg-[#EE3B2B] text-white font-mono text-xs font-bold">Retry</button>
+              </div>
+          )}
+          {!error && delegate === 'CPU' && (
+              <p className="absolute top-14 left-1/2 -translate-x-1/2 z-30 font-mono text-[10px] text-amber-300/80 text-center px-4">
+                  Compatibility mode (CPU tracking): it may run slower.
+              </p>
+          )}
 
           <video ref={videoRef} className="absolute opacity-0 pointer-events-none w-px h-px" autoPlay playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
           
           {/* Picture-in-Picture Webcam (Minimized to bottom corner) */}
-          {showPip && (
+          {showPip && !error && (
               <div className="absolute top-16 right-3 md:top-auto md:right-auto md:bottom-8 md:left-8 z-30 pointer-events-auto bg-[#111317]/90 border border-white/15 rounded-lg p-1.5 md:p-2 shadow-2xl backdrop-blur-md">
                   <div className="hidden md:flex items-center justify-between text-[10px] font-mono text-gray-400 pb-1.5 mb-1 border-b border-white/10">
                       <span className="flex items-center gap-1.5 text-white font-bold">
@@ -362,7 +409,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                           <Minimize2 size={12} />
                       </button>
                   </div>
-                  <canvas ref={pipCanvasRef} className="rounded bg-black block" style={{ width: 192, height: 128 }} />
+                  <canvas ref={pipCanvasRef} className="rounded bg-black block" width={pipInitRef.current.w} height={pipInitRef.current.h} />
               </div>
           )}
 
@@ -389,6 +436,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                   <RecorderControls {...recorderProps} />
               </div>
           )}
+
+          {debug && <DebugReadout getLine={debugLine} />}
       </div>
 
       {/* Sidebar Controls (desktop side panel; phone bottom drawer) */}
@@ -600,13 +649,13 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               isPaused={recorder.isPaused}
               hasData={recorder.hasData}
               busy={exportState !== null || recorder.isRecording}
-              canFlip={false /* wired in Task 6 */}
+              canFlip={canFlip}
               controlsOpen={controlsOpen}
               onRecord={recorder.startRecording}
               onStop={recorder.stopRecording}
               onPlayToggle={recorder.togglePlayback}
               onStopPlayback={recorder.stopPlayback}
-              onFlip={() => {}}
+              onFlip={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}
               onToggleControls={() => setControlsOpen((o) => !o)}
           />
       )}
