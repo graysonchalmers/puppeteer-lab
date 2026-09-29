@@ -58,7 +58,7 @@ Nothing in the repo passes this test yet: (d) has no importer, and the app needs
 - Not an npm package. If a friend asks to lift the core, that is the trigger to publish it, not before.
 - Not multi-user, networked, or collaborative.
 - Not MIDI, OSC, BVH, or FBX until a specific person needs a specific one.
-- Not mobile. Desktop Chrome with a webcam is the target.
+- Phones are supported for Face Puppet only (live view, front and rear camera, recording). Phone video export and the other four demos are unverified on phones (see docs/PHONE_PORT.md). Desktop Chrome with a webcam stays the primary target.
 - Not full-body pose yet. The tracker core should make it a one-file addition; that is the constraint, not the feature.
 - Not more demos. Five is the tour. New ideas replace a stop or go to the backlog.
 

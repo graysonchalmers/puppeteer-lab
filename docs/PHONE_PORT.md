@@ -1,8 +1,8 @@
 # Phone port: scope and findings (2026-09-29)
 
-**Status: NOT built. Documentation only.** Left here for whoever next touches this project.
-Today the app is desktop Chrome with a webcam, as `NORTH_STAR.md` says ("Not mobile"). If phones become
-a goal, remove that non-goal line first, then work this list.
+**Status: items 1 and 2 BUILT 2026-09-29 (layout, camera flip, CPU fallback, errors, ?debug readout); NOT yet verified on a real phone. Items 3 and 4 not built.**
+`NORTH_STAR.md` now says phones are supported for Face Puppet only; desktop Chrome with a webcam stays the primary target.
+The findings below are the original 2026-09-29 audit (pre-build), kept as the record of what was wrong.
 
 The audit was a code read plus a Chromium run with a fake camera against
 https://mocap.graysonchalmers.com at 390x844, 820x600 and 1440x900. iOS Safari and a real rear
@@ -37,6 +37,13 @@ a real phone.
   pauses a muted autoplay video inside a zero-height clipped container. If true, tracking is dead as
   well as invisible until the layout is fixed. Also call `video.play()` explicitly (`FaceDemo.tsx:309`
   relies on `autoPlay`).
+- **Built 2026-09-29** (Face Puppet only): full-screen stage on phones (below 768px, `hooks/useIsPhone.ts`),
+  a bottom bar with Record/Play/Stop, camera flip and a Controls button (`components/PhoneBar.tsx`), the
+  controls panel as a bottom drawer (`components/FaceDemo.tsx`, `index.css`), 44px touch targets at phone
+  width (`components/RecorderControls.tsx`), `h-dvh` in `App.tsx`, PiP sized to the real video aspect
+  (`components/face/pipSize.ts`), and the Layout gate `scripts/phone-check.mjs` (`npm run phone-check`,
+  Playwright chromium touch + webkit + desktop at 390x844 and 1440x900).
+
 
 ### 2. Camera and tracker (`hooks/useTracker.ts`)
 - Line 139-141: `getUserMedia({ video: { facingMode: 'user', width: {ideal: 640}, height: {ideal: 480} } })`.
@@ -55,6 +62,14 @@ a real phone.
   `FaceDemo.tsx:140`, hand left/right labels in `recordingSchema.ts:39-44`. Right for the front camera,
   wrong for a rear camera. Make it conditional on `facingMode`. The PiP is also drawn into a fixed
   192x128 box, which would stretch a portrait frame.
+- **Built 2026-09-29**: `hooks/useTracker.ts` takes a `facing` option (`ideal` facingMode, stream-only
+  flip that keeps the models loaded), tries the GPU delegate then the CPU one and reports which
+  (`delegate`, shown as a "Compatibility mode" notice on CPU), exposes readable camera errors and a
+  `retry()`, and normalizes rear-camera frames to the front-camera convention at the tracker output
+  (`components/shared/mirrorFrame.ts`), so the puppet, hand sides and recording schema stay unchanged.
+  Pure helpers (facing resolution, error text, delegate fallback) are in `hooks/cameraSupport.ts`; the
+  `?debug` readout is `components/DebugReadout.tsx` with `components/shared/fpsMeter.ts`. The Retry
+  button and PiP conditional mirroring live in `components/FaceDemo.tsx`.
 
 ### 3. Recording and export
 - A take is a landmark stream (`useRecorder.ts` buffers `FrameData` in a ref), so it is codec-independent
@@ -97,3 +112,44 @@ a real phone.
    staying alive, the mic prompt not killing the camera, MP4 export with audio, and the download.
 4. Update `HANDOFF.md` and the Web-GC portfolio card (`tool-puppeteerlab` says webcam only) once phones
    actually work; until then the card should keep saying desktop webcam.
+
+## Host-verification checklist (real phone)
+
+Nothing below is verified until someone runs it on a real iPhone (and ideally a real Android phone).
+The Playwright gate (`npm run phone-check`) proves layout only; it has no real camera, GPU or memory
+pressure.
+
+1. Open `https://mocap.graysonchalmers.com/?debug` on the iPhone, open Face Puppet, allow the camera.
+   Report the debug line (render fps | track fps | delegate | size | front/rear) after 10 s of moving
+   your face, and again with hands in view.
+2. Tap Controls: sliders draggable, drawer scrolls, Export/Load reachable.
+3. In the Controls drawer, tap the Video/Pack export chevron and confirm the format popover is fully
+   visible. It opens upward (`bottom-full`) inside the scrolling drawer and may clip at the top of it,
+   especially when the take has audio and more options are listed. Report either way.
+4. Flip camera to rear and back; confirm the puppet is not mirrored on rear, and that hands stay on the
+   right sides.
+5. Deny the camera once (aA > Website Settings > Camera > Deny), reload, confirm the message and Retry
+   after re-allowing.
+6. Rotate to landscape: nothing unreachable. (A landscape phone at 768px wide or more gets the desktop
+   layout, see below.)
+7. Does the delegate say GPU or CPU? On a phone with a working GPU delegate the debug line should say
+   GPU. If it says CPU the app shows a "Compatibility mode" notice; report the fps. Any thermal or
+   memory crash within 2 minutes?
+
+Residual risk: a GPU delegate that constructs fine but throws at the first `detectForVideo` call is not
+handled. Only a construction failure falls back to CPU.
+
+## Known limitations / deferred
+
+- Landscape phones that are 768px wide or more get the desktop layout (the phone layout is below
+  Tailwind's `md` breakpoint), so the side panel and small targets return there.
+- Only Face Puppet was ported and gated. The other four demos (Hand Telemetry, Air Canvas, Tempo
+  Strike, Motion Recorder) are unverified on phones. Their tracker errors also say "tap Retry"
+  (`hooks/useTracker.ts`), but only Face Puppet renders a Retry button.
+- The closed Controls drawer is only moved off-screen (`translate-y-[130%]` + `pointer-events-none`);
+  it is still reachable by keyboard and screen reader (no `inert`/`aria-hidden`).
+- Tailwind still loads from a CDN at runtime (item 4); the page needs network for styling.
+- A GPU delegate that constructs but fails at the first detect call is not handled (see above).
+- iOS video export and download (item 3) are not built or verified: `audioCtx.resume()` outside a
+  user gesture, real-time export needing the tab in front, and the programmatic `<a download>`.
+- Pre-existing, desktop: the header display toggles overlap the sidebar title.
