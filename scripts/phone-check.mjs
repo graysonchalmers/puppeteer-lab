@@ -104,7 +104,17 @@ async function phoneLayout(page, label, vp) {
     try {
       const cdp = await page.context().newCDPSession(page);
       const before = await drawer.evaluate((e) => e.scrollTop, undefined, { timeout: 3000 });
-      await cdp.send('Input.synthesizeScrollGesture', { x: vp.width / 2, y: 500, yDistance: -250, gestureSourceType: 'touch', speed: 800 });
+      // Real touch events: synthesizeScrollGesture(touch) does not scroll in headless Chromium, even on a plain page.
+      const tx = db ? db.x + db.width / 2 : vp.width / 2;
+      const y0 = db ? db.y + db.height - 60 : 700;
+      const y1 = db ? db.y + 60 : 450;
+      const touch = (type, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: tx, y }] });
+      await touch('touchStart', y0);
+      for (let y = y0; y >= y1; y -= 10) {
+        await touch('touchMove', y);
+        await page.waitForTimeout(16);
+      }
+      await touch('touchEnd', y1);
       await page.waitForTimeout(400);
       const after = await drawer.evaluate((e) => e.scrollTop, undefined, { timeout: 3000 });
       check(`${label}: drawer scrolls by touch`, after > before, `${before} -> ${after}`);
