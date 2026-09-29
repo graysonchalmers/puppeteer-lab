@@ -116,9 +116,12 @@ export function useTracker(
       faceLandmarkerRef.current = null;
     };
 
+    // The stream this run owns. Kept here, not read back from videoRef: React nulls the ref
+    // before passive-effect cleanup runs, so videoRef.current?.srcObject is gone by then.
+    let liveStream: MediaStream | null = null;
     const stopStream = () => {
-      const s = videoRef.current?.srcObject as MediaStream | null | undefined;
-      s?.getTracks().forEach((t) => t.stop());
+      liveStream?.getTracks().forEach((t) => t.stop());
+      liveStream = null;
     };
 
     const setup = async () => {
@@ -175,7 +178,7 @@ export function useTracker(
         openCamera();
       } catch (err: any) {
         console.error('Error initializing MediaPipe:', err);
-        setError(`Failed to load ${loading ?? (face && !hands ? 'face' : 'hand')} tracking: ${err.message}. Tap Retry.`);
+        if (isActive) setError(`Failed to load ${loading ?? (face && !hands ? 'face' : 'hand')} tracking: ${err.message}. Tap Retry.`);
       }
     };
 
@@ -201,14 +204,17 @@ export function useTracker(
         activeFacingRef.current = actual;
         setActiveFacing(actual);
 
+        liveStream = stream;
+        setError(null); // a good reopen clears an earlier camera failure
         video.srcObject = stream;
         video.play().catch((e) => console.warn('video.play() was refused', e));
         video.onloadeddata = () => {
-          if (!isActive) return;
+          if (!isActive || seq !== openSeq) return;
           // A new stream: drop smoothing history so the first frame does not lerp from the old camera.
           if (requestRef.current) cancelAnimationFrame(requestRef.current);
           rawFrameRef.current = null;
           frameRef.current = null;
+          lastNow = 0; // the reopen gap must not inflate avgDt
           faceFilterRef.current.reset();
           setIsReady(true);
           tick();
