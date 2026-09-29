@@ -53,12 +53,58 @@ const bbox = (locator) => locator.boundingBox({ timeout: 10000 }).catch(() => nu
 
 const inViewport = (b, vp) => !!b && b.x >= -0.5 && b.y >= -0.5 && b.x + b.width <= vp.width + 0.5 && b.y + b.height <= vp.height + 0.5;
 
-async function openFace(page, query = '') {
+// Stand-in for the deploy-time attribution badge (badge.js: fixed, bottom-right, z 9999), which is not
+// present in dist during local gates. Geometry measured on the live site at 390x844: ~170x28, 12px from
+// the right and bottom edges. It sits on document.body, so it survives the SPA route to Face Puppet.
+async function injectBadge(page) {
+  await page.evaluate(() => {
+    const b = document.createElement('div');
+    b.id = 'gate-badge';
+    b.style.cssText =
+      'position:fixed;right:12px;bottom:12px;width:170px;height:28px;z-index:9999;background:#888;pointer-events:auto';
+    document.body.appendChild(b);
+  });
+}
+
+async function openFace(page, query = '', { badge = false } = {}) {
   await page.goto(`${BASE}/${query}`);
+  if (badge) await injectBadge(page);
   // The hub card title is not clickable; the card's "Open Puppet" button is.
   await page.getByRole('button', { name: /Open Puppet/ }).click();
   // 'attached', not visible: a 0px-tall stage must surface as a FAIL on the height check, not a timeout.
   await page.locator('canvas').first().waitFor({ state: 'attached' });
+  if (badge) {
+    const still = await page.evaluate(() => !!document.getElementById('gate-badge'));
+    if (!still) throw new Error('stand-in badge was removed by the route change; the hit-test would be meaningless');
+  }
+}
+
+// Every bottom-bar button must be the topmost element at its own center (nothing, e.g. the badge, covers it).
+async function barHitTest(page, label) {
+  return page.evaluate(() => {
+    const bar = document.querySelector('[data-testid="phone-bar"]');
+    if (!bar) return { error: 'no [data-testid=phone-bar]' };
+    const barRect = bar.getBoundingClientRect();
+    const drawer = document.querySelector('[data-testid="controls-drawer"]');
+    const covered = [];
+    const buttons = [...bar.querySelectorAll('button')];
+    for (const b of buttons) {
+      const r = b.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!top || !(top === b || b.contains(top))) {
+        const name = b.getAttribute('aria-label') || b.title || b.textContent || 'button';
+        covered.push(`${name} covered by ${top ? (top.id ? '#' + top.id : top.tagName.toLowerCase()) : 'nothing'}`);
+      }
+    }
+    return {
+      count: buttons.length,
+      covered,
+      badge: !!document.getElementById('gate-badge'),
+      barTop: barRect.top,
+      barBottom: barRect.bottom,
+      drawerBottom: drawer ? drawer.getBoundingClientRect().bottom : null,
+    };
+  });
 }
 
 async function phoneLayout(page, label, vp) {
@@ -72,6 +118,14 @@ async function phoneLayout(page, label, vp) {
   check(`${label}: no horizontal overflow`, overflow <= 0, `+${overflow}px`);
   await page.screenshot({ path: `${OUT}/${label}-bar.png` });
 
+  const hit = await barHitTest(page, label);
+  check(`${label}: stand-in badge is present`, !hit.error && hit.badge, hit.error ?? '');
+  check(
+    `${label}: every bottom-bar button is hit-testable (not covered by the badge)`,
+    !hit.error && hit.count > 0 && hit.covered.length === 0,
+    hit.error ?? (hit.covered.length ? hit.covered.join(' | ') : `${hit.count} buttons`),
+  );
+
   try {
     await page.getByRole('button', { name: 'Controls', exact: true }).click({ timeout: 5000 });
   } catch (e) {
@@ -80,6 +134,17 @@ async function phoneLayout(page, label, vp) {
     return;
   }
   await page.waitForTimeout(400);
+  const hitOpen = await barHitTest(page, label);
+  check(
+    `${label}: with the drawer open, every bottom-bar button is still hit-testable`,
+    !hitOpen.error && hitOpen.count > 0 && hitOpen.covered.length === 0,
+    hitOpen.error ?? (hitOpen.covered.length ? hitOpen.covered.join(' | ') : `${hitOpen.count} buttons`),
+  );
+  check(
+    `${label}: drawer bottom edge is at or above the bar top`,
+    !hitOpen.error && hitOpen.drawerBottom !== null && hitOpen.drawerBottom <= hitOpen.barTop + 0.5,
+    `drawer bottom ${hitOpen.drawerBottom} vs bar top ${hitOpen.barTop}`,
+  );
   const drawer = page.getByTestId('controls-drawer');
   const db = await bbox(drawer);
   check(`${label}: Controls drawer opens on-screen`, inViewport(db, vp), JSON.stringify(db));
@@ -132,7 +197,7 @@ async function chromiumPhone(vp) {
   try {
     const ctx = await cr.newContext({ ...devices['Pixel 7'], viewport: vp, permissions: ['camera', 'microphone'] });
     const page = await ctx.newPage();
-    await openFace(page, '?debug');
+    await openFace(page, '?debug', { badge: true });
     await phoneLayout(page, 'chromium-phone', vp);
     const playing = await page
       .waitForFunction(() => {
@@ -160,7 +225,7 @@ async function webkitPhone(vp) {
   try {
     const ctx = await wk.newContext({ ...devices['iPhone 13'], viewport: vp });
     const page = await ctx.newPage();
-    await openFace(page);
+    await openFace(page, '', { badge: true });
     await phoneLayout(page, 'webkit-phone', vp);
     const retry = await page.getByRole('button', { name: 'Retry' }).waitFor({ timeout: 30000 }).then(() => true, () => false);
     check('webkit-phone: camera failure shows a Retry button', retry);

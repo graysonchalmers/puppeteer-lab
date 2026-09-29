@@ -160,6 +160,10 @@ handled. Only a construction failure falls back to CPU.
 
 ## Known limitations / deferred
 
+- Phone layout reserves a 48px strip at the very bottom that the app never uses (bar `bottom-12`,
+  drawer `bottom-28`, stage `mb-28`). The deploy-time attribution badge (`badge.js`, fixed
+  bottom-right, z 9999, roughly 170x28) sits there; without the strip it covers the Controls button
+  and the drawer is unreachable. The gate injects a stand-in badge and hit-tests every bar button.
 - Landscape phones that are 768px wide or more get the desktop layout (the phone layout is below
   Tailwind's `md` breakpoint), so the side panel and small targets return there.
 - Only Face Puppet was ported and gated. The other four demos (Hand Telemetry, Air Canvas, Tempo

@@ -376,7 +376,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       </div>
 
       {/* Main Canvas View */}
-      <div className="flex-1 min-h-0 mb-16 md:mb-0 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
+      <div className="flex-1 min-h-0 mb-28 md:mb-0 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
           {!isCameraReady && !recorder.isPlaying && !error && (
               <div className="text-white/70 animate-pulse flex flex-col items-center">
                   <ScanFace size={40} className="mb-3 text-[#EE3B2B]" />
@@ -449,7 +449,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       <div
           data-testid="controls-drawer"
           className={`bg-[#0E1013] border-white/10 p-5 flex flex-col overflow-y-auto shadow-2xl font-mono
-            fixed inset-x-0 bottom-16 z-40 max-h-[65dvh] rounded-t-xl border-t touch-pan-y overscroll-contain transition-transform duration-200
+            fixed inset-x-0 bottom-28 z-40 max-h-[65dvh] rounded-t-xl border-t touch-pan-y overscroll-contain transition-transform duration-200
             ${controlsOpen ? 'translate-y-0' : 'translate-y-[130%] pointer-events-none'}
             md:static md:translate-y-0 md:pointer-events-auto md:w-80 md:max-h-none md:rounded-none md:border-t-0 md:border-l md:z-20`}
       >

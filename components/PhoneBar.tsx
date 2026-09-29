@@ -30,8 +30,10 @@ interface PhoneBarProps {
 const round =
   'w-11 h-11 rounded-full border flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed';
 
+// bottom-12: the 48px strip below the bar is reserved for the deploy-time attribution badge
+// (fixed, bottom-right, z 9999) that would otherwise cover the bar's rightmost button.
 const PhoneBar: React.FC<PhoneBarProps> = (p) => (
-  <div className="fixed inset-x-0 bottom-0 z-50 h-16 flex items-center justify-around px-3 bg-[#090A0C]/95 backdrop-blur-md border-t border-white/10 font-mono">
+  <div data-testid="phone-bar" className="fixed inset-x-0 bottom-12 z-50 h-16 flex items-center justify-around px-3 bg-[#090A0C]/95 backdrop-blur-md border-t border-white/10 font-mono">
     {!p.isRecording ? (
       <button
         aria-label="Record"
