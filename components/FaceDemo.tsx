@@ -15,6 +15,7 @@ import { createFpsMeter } from './shared/fpsMeter';
 import { Facing } from '../hooks/cameraSupport';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
+import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
 import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
@@ -104,7 +105,6 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   useEffect(() => {
       let animationFrameId: number;
       const ctx = canvasRef.current?.getContext('2d');
-      const pipCtx = pipCanvasRef.current?.getContext('2d');
 
       const render = () => {
           const canvas = canvasRef.current;
@@ -154,17 +154,22 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                       if (recorder.isRecording) recorder.setVideoSize(video.videoWidth, video.videoHeight);
                   }
                   // Hands are captured even when the face drops (a hand over the face).
-                  const cap = frameToCapture(frameRef.current);
-                  currentHands = cap?.landmarks ?? [];
-                  if (cap?.faceLandmarks) {
-                      currentLandmarks = cap.faceLandmarks;
-                      currentBlendshapesRecord = cap.blendshapes ?? {};
+                  // Tracked data is raw for both cameras; only the DISPLAY follows the viewfinder
+                  // (the rear camera mirrors the live puppet). Recording always gets the raw capture.
+                  const raw = frameRef.current;
+                  const capRaw = frameToCapture(raw);
+                  const capView = activeFacingRef.current === 'environment' ? frameToCapture(viewFrame(raw, 'environment')) : capRaw;
+                  currentHands = capView?.landmarks ?? [];
+                  if (capView?.faceLandmarks) {
+                      currentLandmarks = capView.faceLandmarks;
+                      currentBlendshapesRecord = capView.blendshapes ?? {};
                   }
 
-                  // RECORDING LOGIC (filtered landmarks, see recordingSchema capture notes)
-                  if (recorder.isRecording && cap) recorder.captureFrame(cap);
+                  // RECORDING LOGIC (raw filtered landmarks, see recordingSchema capture notes)
+                  if (recorder.isRecording && capRaw) recorder.captureFrame(capRaw);
 
                   // Render PiP Webcam canvas if enabled
+                  const pipCtx = pipCanvasRef.current?.getContext('2d');
                   if (showPip && pipCanvasRef.current && pipCtx) {
                       const pipC = pipCanvasRef.current;
                       const { w: pw, h: ph } = pipDims(videoAspectRef.current, isPhoneRef.current ? 112 : 192);
@@ -655,7 +660,11 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               onStop={recorder.stopRecording}
               onPlayToggle={recorder.togglePlayback}
               onStopPlayback={recorder.stopPlayback}
-              onFlip={() => setFacing((f) => (f === 'user' ? 'environment' : 'user'))}
+              flipDisabled={!isCameraReady}
+              onFlip={() => {
+                  if (recorder.isRecording || recorder.isPlaying || exportState !== null || !isCameraReady) return;
+                  setFacing((f) => (f === 'user' ? 'environment' : 'user'));
+              }}
               onToggleControls={() => setControlsOpen((o) => !o)}
           />
       )}

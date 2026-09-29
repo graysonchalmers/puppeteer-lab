@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mirrorFrame, mirrorBlendshapes, mirrorTransform, swapSide } from './mirrorFrame';
+import { mirrorFrame, mirrorBlendshapes, mirrorTransform, swapSide, viewFrame } from './mirrorFrame';
 import { mapHandToWorld } from './mapHandToWorld';
 import { Landmark, TrackedFrame, TrackedHand } from './trackerTypes';
 
@@ -130,5 +130,27 @@ describe('mirrorFrame', () => {
     expect(out.face).toBeNull();
     expect(out.right).toBeNull();
     expect(out.left!.landmarks[0].x).toBe(0.75);
+  });
+});
+
+describe('viewFrame', () => {
+  it('returns the raw frame untouched for the front camera', () => {
+    const f = frame();
+    expect(viewFrame(f, 'user')).toBe(f);
+  });
+
+  it('mirrors for the rear camera without mutating the raw frame', () => {
+    const f = frame();
+    const copy = structuredClone(f);
+    const out = viewFrame(f, 'environment')!;
+    expect(out).toEqual(mirrorFrame(f));
+    expect(out.right!.side).toBe('right');
+    expect(out.face!.landmarks[0].x).toBe(0.75);
+    expect(f).toEqual(copy);
+  });
+
+  it('is null-safe', () => {
+    expect(viewFrame(null, 'user')).toBeNull();
+    expect(viewFrame(null, 'environment')).toBeNull();
   });
 });

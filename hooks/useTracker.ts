@@ -7,9 +7,11 @@
  * Euro bank owned here; hands keep the slider-driven lerp.
  *
  * Phone support: `facing` picks the front/rear camera (flipping restarts only
- * the stream, never the models); a rear-camera frame is mirrored once here so
- * every consumer sees front-camera semantics; landmarkers try the GPU delegate
- * then the CPU one; camera failures are readable and retryable.
+ * the stream, never the models). Frames stay RAW for both cameras (MediaPipe
+ * sees the same geometry either way, so recordings keep one meaning); the
+ * rear-camera viewfinder mirroring is done at display time (see mirrorFrame's
+ * viewFrame). Landmarkers try the GPU delegate then the CPU one; camera
+ * failures are readable.
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { HandLandmarker, FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
@@ -19,7 +21,6 @@ import { smoothingToLerp } from '../components/shared/smoothing';
 import { createOneEuroBank, faceSmoothingToMinCutoff } from '../components/shared/oneEuro';
 import { updateAvgDt, nextFaceAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
-import { mirrorFrame } from '../components/shared/mirrorFrame';
 import { createFpsMeter } from '../components/shared/fpsMeter';
 import { poke, registerTracker, useIdlePaused } from '../components/shared/idle';
 import { Facing, Delegate, resolveFacing, describeCameraError, createWithDelegateFallback } from './cameraSupport';
@@ -89,10 +90,9 @@ export function useTracker(
   /** Re-run setup after a failure (models or camera). */
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
 
-  // Published frame: mirrored to the front-camera convention when the rear camera is live.
+  // Published frame: always raw (same for both cameras). Also what buildFrame's
+  // smoothing continuity and the alternate-tick face reuse read.
   const frameRef = useRef<TrackedFrame | null>(null);
-  // Un-mirrored frame: what buildFrame's smoothing continuity and the alternate-tick face reuse read.
-  const rawFrameRef = useRef<TrackedFrame | null>(null);
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const requestRef = useRef<number>(0);
@@ -178,7 +178,7 @@ export function useTracker(
         openCamera();
       } catch (err: any) {
         console.error('Error initializing MediaPipe:', err);
-        if (isActive) setError(`Failed to load ${loading ?? (face && !hands ? 'face' : 'hand')} tracking: ${err.message}. Tap Retry.`);
+        if (isActive) setError(`Failed to load ${loading ?? (face && !hands ? 'face' : 'hand')} tracking: ${err.message}`);
       }
     };
 
@@ -212,7 +212,6 @@ export function useTracker(
           if (!isActive || seq !== openSeq) return;
           // A new stream: drop smoothing history so the first frame does not lerp from the old camera.
           if (requestRef.current) cancelAnimationFrame(requestRef.current);
-          rawFrameRef.current = null;
           frameRef.current = null;
           lastNow = 0; // the reopen gap must not inflate avgDt
           faceFilterRef.current.reset();
@@ -253,15 +252,14 @@ export function useTracker(
         try {
           const handResult = handLm ? handLm.detectForVideo(video, now) : null;
           const faceResult = runFace ? faceLm!.detectForVideo(video, now) : null;
-          const prev = rawFrameRef.current;
+          const prev = frameRef.current;
           const next = buildFrame(prev, handResult, faceResult, now, {
             confidence: settingsRef.current.confidence,
             smoothingAlpha: settingsRef.current.smoothingAlpha,
             faceFilter: faceFilterRef.current,
           });
           if (faceLm && !runFace && prev) next.face = prev.face; // alternate tick: reuse
-          rawFrameRef.current = next;
-          frameRef.current = activeFacingRef.current === 'environment' ? mirrorFrame(next) : next;
+          frameRef.current = next;
           statsRef.current.trackFps = meter.tick(now);
           if (next.hands.length > 0) poke(); // playing with your hands is using the app
         } catch (e) {

@@ -16,6 +16,8 @@ interface PhoneBarProps {
   /** Export in progress or recording: locks everything but Stop. */
   busy: boolean;
   canFlip: boolean;
+  /** Extra flip lock, e.g. while the camera is still opening. */
+  flipDisabled?: boolean;
   controlsOpen: boolean;
   onRecord: () => void;
   onStop: () => void;
@@ -70,7 +72,7 @@ const PhoneBar: React.FC<PhoneBarProps> = (p) => (
       <button
         aria-label="Flip camera"
         onClick={p.onFlip}
-        disabled={p.busy || p.isRecording || p.isPlaying}
+        disabled={p.flipDisabled || p.busy || p.isRecording || p.isPlaying}
         className={`${round} bg-white/5 border-white/20 text-white`}
       >
         <SwitchCamera size={18} />

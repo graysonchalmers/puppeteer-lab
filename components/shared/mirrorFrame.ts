@@ -2,13 +2,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Rear-camera normalization. MediaPipe sees the same raw geometry from the
- * front and the rear camera, but everything downstream (the puppet's X mirror,
- * the recorder, mapHandToWorld's X mirror, the Blender importer) assumes the
- * front-camera convention. Mirroring the frame once at the tracker output
- * lets a rear-camera take mean exactly what a front-camera take means, with
- * no schema change: x flips, hand sides and blendshape sides swap, world x and
- * velocity x negate, and the head matrix is conjugated by diag(-1, 1, 1, 1).
+ * Rear-camera DISPLAY helpers. MediaPipe sees the same raw geometry from the
+ * front and the rear camera for a subject facing the lens (the subject's right
+ * hand is at image-left either way), so tracked frames and recordings stay RAW
+ * and mean the same thing for both cameras (see recordingSchema). Only the live
+ * view differs: the front camera is shown as a mirror, the rear camera as a
+ * viewfinder window, so on the rear camera the live puppet is mirrored at
+ * display time with these helpers. Never apply them to data that is recorded
+ * or exported.
+ *
+ * mirrorFrame flips x, swaps hand sides and blendshape sides, negates world x
+ * and velocity x, and conjugates the head matrix by diag(-1, 1, 1, 1).
  */
 import { Landmark, TrackedFace, TrackedFrame, TrackedHand, Vec3 } from './trackerTypes';
 
@@ -67,4 +71,10 @@ export function mirrorFrame(f: TrackedFrame): TrackedFrame {
     right: f.left ? flipped.get(f.left) ?? null : null,
     face: f.face ? flipFace(f.face) : null,
   };
+}
+
+/** The frame as the live view should show it: raw for the front camera, mirrored for the rear one. */
+export function viewFrame(f: TrackedFrame | null, facing: 'user' | 'environment'): TrackedFrame | null {
+  if (!f) return null;
+  return facing === 'environment' ? mirrorFrame(f) : f;
 }
