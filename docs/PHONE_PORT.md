@@ -58,6 +58,12 @@ a real phone.
   `NotAllowedError` vs `NotFoundError` distinction.
 - Orientation change is not handled (no resize/orientationchange listener); aspect is re-read from
   `videoWidth/videoHeight` each frame (`FaceDemo.tsx:117`), so it partly self-heals.
+- SUPERSEDED (2026-09-29): the "wrong for a rear camera / make it conditional on `facingMode`" conclusion
+  below does not hold under the final design (see "Built 2026-09-29"). Recorded and tracked data stays RAW
+  for both cameras, because MediaPipe sees the same raw geometry front and rear, so the hand `side` labels
+  in `recordingSchema.ts` must NOT be made conditional; only the live puppet view and the PiP follow the
+  viewfinder on the rear camera. Making the data conditional would re-introduce a data-mirroring bug.
+  Original audit text follows for history.
 - Mirroring is hard-coded: puppet X-mirror in `components/face/projection.ts:33`, PiP `scale(-1,1)` at
   `FaceDemo.tsx:140`, hand left/right labels in `recordingSchema.ts:39-44`. Right for the front camera,
   wrong for a rear camera. Make it conditional on `facingMode`. The PiP is also drawn into a fixed
@@ -133,7 +139,9 @@ pressure.
    the front camera and once on the rear camera pointed at yourself or another person. Export each take
    (Video/Pack or Full JSON) and confirm the hand `side` labels and the eyeBlink blendshapes in
    recording.json match between the two. The live view on the rear camera should look like the
-   viewfinder (not mirrored). Flip back to front afterwards.
+   viewfinder (not mirrored). Flip back to front afterwards. Compare the exported `recording.json`,
+   NOT the live sidebar blendshape readout: on the rear camera the live readout follows the mirrored
+   viewfinder, so its Left/Right differs from what is recorded, by design.
 5. Deny the camera once (aA > Website Settings > Camera > Deny), reload, confirm the message and Retry
    after re-allowing.
 5b. Idle check: keep the app open for over 60 s with no touches while only your face is in view. The
@@ -170,3 +178,6 @@ handled. Only a construction failure falls back to CPU.
 - Flip is not possible after a tablet crosses 768px while on the rear camera (the PhoneBar disappears
   with the phone layout).
 - No `vh` fallback for `dvh` on very old browsers.
+- If the rear camera fails to open (e.g. `NotReadableError`), the Flip button is shown but disabled and
+  Retry re-requests the rear camera; a page reload is the way back to the front camera. (Parked, one-line
+  code fix: `flipDisabled={!isCameraReady && !error}`.)
