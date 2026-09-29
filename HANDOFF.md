@@ -15,12 +15,17 @@ What's in it (Face Puppet only; the other 4 demos are unverified on phones):
 ## 📌 Where we stopped
 Everything is built, reviewed, merged to `main` and deployed. **Nothing has been tested on a real phone.** Camera start, the GPU delegate on iOS, memory with several WebGL contexts, rear camera facing reports, WebKit finger scrolling and slider drags are all unverified.
 
-## ▶️ Next concrete step
-Grayson opens `https://mocap.graysonchalmers.com/?debug` on the iPhone and works through the **host-verification checklist in `docs/PHONE_PORT.md`**, reporting the debug line (render fps | track fps | GPU/CPU | size | front/rear) with face only and with hands in view. Then decide phone defaults (hands-off by default? LOW mesh?) from those numbers.
+## ▶️ Plan: what's next (in order)
+Grayson's first iPhone run (2026-09-29): "mostly works". What didn't work is not yet recorded.
 
-Alternatives:
-- **(a) Phone export/download on iOS** (PHONE_PORT item 3), after the phone camera path is proven.
-- **(b) The 2026-09-22 on-camera Three.js tuning** (LOW/FULL, boost defaults) is still owed.
+0. **Triage the "mostly" (5 min, Grayson).** Send the `?debug` line (render fps | track fps | GPU/CPU | size | front/rear), face only and with hands in view, plus which `docs/PHONE_PORT.md` checklist items failed (export popover clipped? rear camera? sliders? pause after 60 s?). Everything below is ordered assuming nothing big broke; a real failure jumps the queue.
+1. **CI green on `main`.** The `recordingSchema` 100 ms perf test is red on the runner (177 ms). A separate session was started to fix it; merge that first, or every later change looks red.
+2. **Phone polish bundle (one small change, about an hour).** Flip stays enabled after a failed camera open (`flipDisabled={!isCameraReady && !error}`), `inert` on the closed drawer, decide whether a visible face counts as activity for idle pause, remove dead `activeFacingRef` in `useTracker`, add a short-viewport (390x667) case to `phone-check`, fix whatever step 0 found.
+3. **Phone defaults from real numbers.** If track fps is low, default hands off and/or LOW mesh on phones (`isPhone`), else leave. Decide from step 0's numbers, not before.
+4. **Phone recording export (PHONE_PORT item 3)**, the biggest remaining lever: create/resume the AudioContext inside the tap, `navigator.share({files})` fallback and a visible Save button, wake lock during export, warn about screen lock. Only useful once phone recording itself is trusted (checklist step 4).
+5. **Self-host Tailwind (PHONE_PORT item 4).** `index.html` loads it from a CDN at runtime; North Star says offline by default. Independent of phones.
+6. **Owed from before:** the 2026-09-22 on-camera Three.js tuning (LOW/FULL, boost defaults), then video preprocessing (dim rooms).
+7. **Later:** the other four demos on phones; update the Web-GC portfolio card only after phones are verified (until then it stays "desktop webcam").
 
 ## ❓ Open questions
 - Should a visible face count as activity for the idle auto-pause? On a phone with no touches it pauses after 60 s (hands already count).
