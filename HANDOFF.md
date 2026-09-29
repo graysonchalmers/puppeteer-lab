@@ -1,68 +1,43 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-22 20:50 CT_
+_Last updated: 2026-09-29 (CT)_
 
 ## 🎯 Current state
-Face Puppet now renders with **Three.js** and is live on [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com) (stamp `🌈 ISLAND · 3f7fae · 2026-09-22`, code at `3f7fae5`, `origin/main` in sync).
+Face Puppet now has a **phone layout and a front/rear camera**, deployed to [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com) (stamp `🌴 LATIN · 9a7593 · 2026-09-29`). The code is on branch `claude/puppeteer-lab-mobile-ecc9b4` (pushed, tip `9a7593c`+docs). **It is NOT merged to `main`**; `main` still holds the 2026-09-22 Three.js state.
 
-What's in it:
-- **Face:** crease-angle smooth shading with a Crease Angle slider (default 35°), a Mesh LOW (298 tris) / FULL (840 tris) toggle, and key/fill/rim studio lighting.
-- **Eyes:** self-lit eyeballs that the lids cover, plus Blink Boost, where real blinks snap shut.
-- **Mouth:** 3D teeth that part continuously, with Jaw Boost (default 0.75, rescaled 1.6x).
-- **Brows:** stylized, with Brow Boost; the left/right sides were verified on camera and flipped.
-- **Hands:** capsule fingers and a palm pad.
-- **Idle auto-pause:** after 60 s with no input the camera and trackers stop, with a click-to-resume overlay. It never pauses while recording or exporting.
-
-Checks: typecheck clean, 175/175 tests, build + smoke OK. Proof so far is synthetic screenshots plus one real video export that ran to completion. Nothing since the brow flip has been checked on a real camera.
+What's in it (Face Puppet only; the other 4 demos are unverified on phones):
+- **Layout (< 768px):** full-screen stage, fixed bottom bar (Record / Play / Flip camera / Controls), slide-up Controls drawer (sliders, display toggles, recorder file ops). A 48px strip under the bar is reserved for the deploy-time attribution badge, which otherwise covers the Controls button. Desktop (>= 768px) is unchanged except the PiP is now aspect-true (192x144).
+- **Camera:** `useTracker` takes `facing`; flipping reopens only the stream. GPU delegate falls back to CPU (visible "Compatibility mode" notice). Camera errors are readable, with a Retry button in Face Puppet. Explicit `video.play()`. The stream is now released on unmount.
+- **Rear camera design (important):** tracked frames and recordings stay **RAW** for both cameras (MediaPipe sees the same geometry front and rear). Only the live puppet view and the PiP follow the viewfinder on the rear camera (`viewFrame` in `components/shared/mirrorFrame.ts`). Do not mirror data in the tracker; a final review caught exactly that bug.
+- **`?debug`** in the URL shows one line: render fps | track fps | delegate | camera size | front/rear | dpr.
+- **Gate:** `npm run phone-check` (Playwright: Chromium touch + WebKit at 390x844, desktop 1440x900, stand-in deploy badge). 26/26 pass. Also typecheck clean, 204 tests, smoke OK.
 
 ## 📌 Where we stopped
-Everything is committed, pushed and deployed, and the tree is clean. Waiting on Grayson's on-camera check of the Three.js puppet.
+Everything is built, reviewed, pushed and deployed. **Nothing has been tested on a real phone.** Camera start, the GPU delegate on iOS, memory with several WebGL contexts, rear camera facing reports, WebKit finger scrolling and slider drags are all unverified.
 
 ## ▶️ Next concrete step
-**On-camera tuning on the live site (real Chrome, webcam):**
-1. Pick Mesh LOW or FULL and a Crease Angle. After that, lock them in or remove the toggle.
-2. Tune the Blink, Brow and Jaw Boost defaults (0.5 / 0.5 / 0.75): blinks close fully, squints stay partial, and speech parts the teeth.
-3. At a strong head turn, check that the eyeballs never poke through and that no dark sliver appears near the silhouette. The per-triangle normal flip in `faceGeometry.ts` is the suspect.
-4. Confirm face + hands tracking holds 30 fps or better.
-5. Idle auto-pause: the webcam light goes off after 60 s and comes back on resume.
-6. The older checks from the Face Puppet overhaul (mouth flicker, Video/Pack exports on a phone) are still unverified; see `handoff-log/2026-09-22-face-puppet-overhaul.md`.
+Grayson opens `https://mocap.graysonchalmers.com/?debug` on the iPhone and works through the **host-verification checklist in `docs/PHONE_PORT.md`**, reporting the debug line (render fps | track fps | GPU/CPU | size | front/rear) with face only and with hands in view. Then decide phone defaults (hands-off by default? LOW mesh?) from those numbers.
 
 Alternatives:
-- **(a) Video preprocessing:** automatic brightness/contrast before tracking, for dim rooms. Grayson asked for it and it was deliberately split out; it touches `useTracker` for every demo.
-- **(b) The older 2026-09-16 checklist** (Air Canvas, Hand Telemetry, Motion Recorder). It is equally unverified but lower value right now.
+- **(a) Merge the branch to `main`** (needs Grayson's call; CI runs on main pushes) so the deployed build matches `main`.
+- **(b) Phone export/download on iOS** (PHONE_PORT item 3), after the phone camera path is proven.
+- **(c) The 2026-09-22 on-camera Three.js tuning** (LOW/FULL, boost defaults) is still owed.
 
 ## ❓ Open questions
-- LOW vs FULL mesh, and the crease default: decide on camera, then drop the toggle or keep it.
-- If the eyeballs poke through or a silhouette sliver appears at strong turns, the fix is either orienting normals per mesh instead of per triangle, or retuning `EYE_SETBACK`.
-- Parked from the Three.js final review:
-  - small per-frame allocations in `PuppetScene` (hands/mouth); profile before optimizing.
-  - a lost WebGL context mid-export records black frames rather than aborting (accepted, noted in the spec).
-  - the fixed 64×3 dynamic buffers truncate silently if the topology ever grows.
-- Idle auto-pause fires after 60 s even while you perform live without touching anything (only recording holds it). Should a visible face count as activity too?
-- Carried over:
-  - In-app playback still has the voice-leads-lips offset (export is corrected).
-  - Mouth thresholds were tuned only on synthetic data.
-  - `capture.smoothing` is deferred.
-  - A left-only hand is labelled `right` in v3 files.
-  - A kinematics file loaded back fails silently.
-  - Keyboard scrubbing does not pause.
-  - The CDN pin could drift.
-  - Details for these are in the prior `handoff-log/` entries.
+- Should a visible face count as activity for the idle auto-pause? On a phone with no touches it pauses after 60 s (hands already count).
+- Hands-off / LOW-mesh defaults on phones: decide after real numbers.
+- Flip button is disabled after a failed camera open (Retry re-requests the same camera; reload returns to front). One-line fix: `flipDisabled={!isCameraReady && !error}`.
+- Merge to `main`?
+- Carried over from 2026-09-22: mesh LOW/FULL choice, eyeball poke-through at strong turns, in-app playback voice offset, Video preprocessing (split out), and the older items listed in `handoff-log/`.
 
 ## 🗂️ Changed this session
-- Branch: `main`. Brow flip `c64c115`, Jaw Boost `8430d07`, idle pause and jaw rescale `a48b7b0`, spec `afdf13e`, plan `a91cf7f`, Three.js tasks `9b3ab26..1588085`, final-review fixes `3f7fae5`, HANDOFF `65e0492`. Everything is pushed and deployed.
-- New files:
-  - `components/face/puppetState.ts`, `projection.ts`, `creaseGroups.ts`, `faceGeometry.ts`, `eyes.ts`, `handRig.ts`, `PuppetScene.ts`
-  - `components/shared/idle.ts`, `components/IdleOverlay.tsx`
-- Rewritten: `FaceMeshRenderer.ts`.
-- Removed: `lowPoly.ts`, `handMesh.ts`.
+- Branch `claude/puppeteer-lab-mobile-ecc9b4`, 15 commits from `9bf3e49`. Key files: `hooks/useTracker.ts`, `hooks/cameraSupport.ts`, `hooks/useIsPhone.ts`, `components/PhoneBar.tsx`, `components/DebugReadout.tsx`, `components/FaceDemo.tsx`, `components/RecorderControls.tsx`, `components/shared/mirrorFrame.ts`, `components/shared/fpsMeter.ts`, `components/face/pipSize.ts`, `scripts/phone-check.mjs`, `index.css`, `App.tsx`. Plan: `docs/superpowers/plans/2026-09-29-phone-port-layout-camera.md`. NORTH_STAR non-goal narrowed to "Face Puppet on phones".
 - Decisions (+ why):
-  - **Three.js over Canvas 2D.** Real smooth shading and lights need it. It's plain three, not R3F, because both the stage and the export render on demand.
-  - **Crease groups built from the neutral canonical face.** That way edges never flicker between hard and smooth as the face moves.
-  - **Self-lit eyes with a fixed glint.** They read in any lighting.
-  - **Boosts stay render-time only.** Recordings keep the raw data.
-  - **Brow and blink sides follow image position.** Verified on camera.
-  - **Video preprocessing split out.** So a tracking regression can be attributed to one change.
+  - **Data stays raw for both cameras.** Same geometry front and rear; mirroring data would record a subject's anatomy backwards.
+  - **Reserve a 48px strip for the deploy badge.** The badge is injected at deploy time (fixed bottom-right, z 9999), so no local gate sees it; the gate injects a stand-in of the same size.
+  - **Measure before changing phone defaults.** Hence `?debug` and the CPU fallback notice.
+  - **Touch-scroll gate uses real touch events** (`Input.dispatchTouchEvent`); synthesized scroll gestures don't scroll in this environment.
+- Known flaky test: `recordingSchema.test.ts` "under 100ms" wall-clock perf budget (100-111 ms under load; passes alone).
 
 ---
 📜 Full session history: `handoff-log/` (one dated file per session, oldest to newest)
