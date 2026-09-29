@@ -19,7 +19,7 @@ Everything is built, reviewed, merged to `main` and deployed. **Nothing has been
 Grayson's first iPhone run (2026-09-29): "mostly works". What didn't work is not yet recorded.
 
 0. **Triage the "mostly" (5 min, Grayson).** Send the `?debug` line (render fps | track fps | GPU/CPU | size | front/rear), face only and with hands in view, plus which `docs/PHONE_PORT.md` checklist items failed (export popover clipped? rear camera? sliders? pause after 60 s?). Everything below is ordered assuming nothing big broke; a real failure jumps the queue.
-1. **CI green on `main`.** The `recordingSchema` 100 ms perf test is red on the runner (177 ms). A separate session was started to fix it; merge that first, or every later change looks red.
+1. ~~CI green on `main`.~~ **Done 2026-09-29:** the `recordingSchema` perf test now uses the median of 7 runs (`9513073`), and CI on `main` is green.
 2. **Phone polish bundle (one small change, about an hour).** Flip stays enabled after a failed camera open (`flipDisabled={!isCameraReady && !error}`), `inert` on the closed drawer, decide whether a visible face counts as activity for idle pause, remove dead `activeFacingRef` in `useTracker`, add a short-viewport (390x667) case to `phone-check`, fix whatever step 0 found.
 3. **Phone defaults from real numbers.** If track fps is low, default hands off and/or LOW mesh on phones (`isPhone`), else leave. Decide from step 0's numbers, not before.
 4. **Phone recording export (PHONE_PORT item 3)**, the biggest remaining lever: create/resume the AudioContext inside the tap, `navigator.share({files})` fallback and a visible Save button, wake lock during export, warn about screen lock. Only useful once phone recording itself is trusted (checklist step 4).
@@ -40,7 +40,7 @@ Grayson's first iPhone run (2026-09-29): "mostly works". What didn't work is not
   - **Reserve a 48px strip for the deploy badge.** The badge is injected at deploy time (fixed bottom-right, z 9999), so no local gate sees it; the gate injects a stand-in of the same size.
   - **Measure before changing phone defaults.** Hence `?debug` and the CPU fallback notice.
   - **Touch-scroll gate uses real touch events** (`Input.dispatchTouchEvent`); synthesized scroll gestures don't scroll in this environment.
-- Known flaky test: `recordingSchema.test.ts` "under 100ms" wall-clock perf budget (100-111 ms under load; passes alone). A separate session was started to fix it.
+- Known flaky test: `recordingSchema.test.ts` "under 100ms" wall-clock perf budget (100-111 ms under load; passes alone). Fixed (median of 7 runs).
 
 ---
 📜 Full session history: `handoff-log/` (one dated file per session, oldest to newest)
