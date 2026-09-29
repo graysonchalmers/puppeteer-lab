@@ -14,19 +14,19 @@ export function resolveFacing(requested: Facing, reported: string | undefined): 
   return requested;
 }
 
-/** One human sentence per getUserMedia failure. Every one of them is retryable. */
+/** One human sentence per getUserMedia failure. */
 export function describeCameraError(err: unknown): string {
   const name = (err as { name?: string } | null | undefined)?.name ?? '';
   switch (name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Camera permission was denied. Allow camera access for this site (on iPhone: the aA menu > Website Settings > Camera), then tap Retry.';
+      return 'Camera permission was denied. Allow camera access for this site (on iPhone: the aA menu > Website Settings > Camera) and try again.';
     case 'NotFoundError':
     case 'OverconstrainedError':
       return 'No camera was found on this device.';
     case 'NotReadableError':
     case 'AbortError':
-      return 'The camera is busy or unavailable. Close other apps that use it, then tap Retry.';
+      return 'The camera is busy or unavailable. Close other apps that use it and try again.';
     case 'TypeError':
       // navigator.mediaDevices is undefined on non-https pages.
       return 'This browser blocked camera access here. The camera only works on a secure (https) page.';

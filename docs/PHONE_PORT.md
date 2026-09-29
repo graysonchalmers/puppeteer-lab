@@ -65,11 +65,14 @@ a real phone.
 - **Built 2026-09-29**: `hooks/useTracker.ts` takes a `facing` option (`ideal` facingMode, stream-only
   flip that keeps the models loaded), tries the GPU delegate then the CPU one and reports which
   (`delegate`, shown as a "Compatibility mode" notice on CPU), exposes readable camera errors and a
-  `retry()`, and normalizes rear-camera frames to the front-camera convention at the tracker output
-  (`components/shared/mirrorFrame.ts`), so the puppet, hand sides and recording schema stay unchanged.
+  `retry()`. Tracked frames stay RAW for both cameras: MediaPipe sees the same geometry from the front
+  and the rear camera for a subject facing the lens, so recordings keep one meaning (same schema, same
+  hand `side` and blendshape semantics). Only the live view follows the viewfinder: on the rear camera
+  the live puppet is mirrored at display time (`viewFrame` in `components/shared/mirrorFrame.ts`, used
+  by `components/FaceDemo.tsx`) and the PiP is drawn unmirrored; the recorder always gets the raw frame.
   Pure helpers (facing resolution, error text, delegate fallback) are in `hooks/cameraSupport.ts`; the
   `?debug` readout is `components/DebugReadout.tsx` with `components/shared/fpsMeter.ts`. The Retry
-  button and PiP conditional mirroring live in `components/FaceDemo.tsx`.
+  button, the PiP (mirrored only for the front camera) and the rear-camera view mirroring live in `components/FaceDemo.tsx`.
 
 ### 3. Recording and export
 - A take is a landmark stream (`useRecorder.ts` buffers `FrameData` in a ref), so it is codec-independent
@@ -126,10 +129,18 @@ pressure.
 3. In the Controls drawer, tap the Video/Pack export chevron and confirm the format popover is fully
    visible. It opens upward (`bottom-full`) inside the scrolling drawer and may clip at the top of it,
    especially when the take has audio and more options are listed. Report either way.
-4. Flip camera to rear and back; confirm the puppet is not mirrored on rear, and that hands stay on the
-   right sides.
+4. Rear-camera data check: record the SAME gesture (raise your right hand, wink your right eye) once on
+   the front camera and once on the rear camera pointed at yourself or another person. Export each take
+   (Video/Pack or Full JSON) and confirm the hand `side` labels and the eyeBlink blendshapes in
+   recording.json match between the two. The live view on the rear camera should look like the
+   viewfinder (not mirrored). Flip back to front afterwards.
 5. Deny the camera once (aA > Website Settings > Camera > Deny), reload, confirm the message and Retry
    after re-allowing.
+5b. Idle check: keep the app open for over 60 s with no touches while only your face is in view. The
+   camera idle-pauses after 60 s (a visible face does not count as activity; hands do). Report whether
+   that surprises you.
+5c. At 390px wide the CPU "Compatibility mode" notice may wrap and sit under the corner PiP. Report if it
+   looks wrong.
 6. Rotate to landscape: nothing unreachable. (A landscape phone at 768px wide or more gets the desktop
    layout, see below.)
 7. Does the delegate say GPU or CPU? On a phone with a working GPU delegate the debug line should say
@@ -144,8 +155,8 @@ handled. Only a construction failure falls back to CPU.
 - Landscape phones that are 768px wide or more get the desktop layout (the phone layout is below
   Tailwind's `md` breakpoint), so the side panel and small targets return there.
 - Only Face Puppet was ported and gated. The other four demos (Hand Telemetry, Air Canvas, Tempo
-  Strike, Motion Recorder) are unverified on phones. Their tracker errors also say "tap Retry"
-  (`hooks/useTracker.ts`), but only Face Puppet renders a Retry button.
+  Strike, Motion Recorder) are unverified on phones. Only Face Puppet renders a Retry
+  button; the others show tracker errors (now worded without "tap Retry") with no retry control.
 - The closed Controls drawer is only moved off-screen (`translate-y-[130%]` + `pointer-events-none`);
   it is still reachable by keyboard and screen reader (no `inert`/`aria-hidden`).
 - Tailwind still loads from a CDN at runtime (item 4); the page needs network for styling.
@@ -153,3 +164,9 @@ handled. Only a construction failure falls back to CPU.
 - iOS video export and download (item 3) are not built or verified: `audioCtx.resume()` outside a
   user gesture, real-time export needing the tab in front, and the programmatic `<a download>`.
 - Pre-existing, desktop: the header display toggles overlap the sidebar title.
+- On a 320px-wide screen the display-toggles row overflows the drawer.
+- The export banner is narrow on phones (phone export is out of scope for this port).
+- Retry reloads both models even if only the camera failed.
+- Flip is not possible after a tablet crosses 768px while on the rear camera (the PhoneBar disappears
+  with the phone layout).
+- No `vh` fallback for `dvh` on very old browsers.
