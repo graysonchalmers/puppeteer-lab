@@ -5,8 +5,10 @@
 */
 
 import React, { useRef, useEffect, useState } from 'react';
-import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2, X } from 'lucide-react';
 import { useTracker } from '../hooks/useTracker';
+import { useIsPhone } from '../hooks/useIsPhone';
+import PhoneBar from './PhoneBar';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
 import { useRecorder } from '../hooks/useRecorder';
@@ -57,6 +59,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const [showPip, setShowPip] = useState<boolean>(true);
   const [showGazeRays, setShowGazeRays] = useState<boolean>(false);
   const [showMocapDots, setShowMocapDots] = useState<boolean>(false);
+  const isPhone = useIsPhone();
+  const [controlsOpen, setControlsOpen] = useState(false);
 
   const [exportState, setExportState] = useState<{ kind: 'video' | 'pack'; ms: number } | null>(null);
   const exportAbortRef = useRef<AbortController | null>(null);
@@ -256,26 +260,14 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
       }
   };
 
-  return (
-    <div className="relative w-full h-full bg-[#090A0C] flex flex-col md:flex-row select-none">
-       {/* Top Header */}
-       <div className="absolute top-0 left-0 z-50 p-4 w-full flex justify-between items-center bg-gradient-to-b from-[#090A0C]/90 to-transparent pointer-events-none">
-         <div className="flex items-center gap-3 pointer-events-auto">
-           <button onClick={onBack} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-lg border border-white/15 transition-all text-xs font-mono text-white cursor-pointer">
-             <ArrowLeft size={14} /> Hub
-           </button>
-           <span className="text-xs font-mono tracking-wider text-gray-300 border-l border-white/15 pl-3">
-             Face Puppet &amp; Expressions
-           </span>
-         </div>
-
-         {/* Puppet Display Toggles */}
+  // Display toggles: header on desktop, inside the Controls drawer on phones.
+  const displayToggles = (
          <div className="flex items-center gap-2 pointer-events-auto bg-[#111317]/80 backdrop-blur-md border border-white/10 px-2 py-1 rounded-lg text-[11px] font-mono">
              <button
                  onClick={() => setShowGazeRays(!showGazeRays)}
                  disabled={exportState !== null}
                  title={exportState ? 'Locked while exporting (the export uses the value from its start)' : undefined}
-                 className={`px-2 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showGazeRays ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+                 className={`min-h-[44px] px-3 md:min-h-0 md:px-2 md:py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showGazeRays ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
              >
                  GAZE RAYS
              </button>
@@ -283,21 +275,66 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                  onClick={() => setShowMocapDots(!showMocapDots)}
                  disabled={exportState !== null}
                  title={exportState ? 'Locked while exporting (the export uses the value from its start)' : undefined}
-                 className={`px-2 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showMocapDots ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+                 className={`min-h-[44px] px-3 md:min-h-0 md:px-2 md:py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${showMocapDots ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
              >
                  MOCAP DOTS
              </button>
              <button
                  onClick={() => setShowPip(!showPip)}
-                 className={`px-2 py-0.5 rounded transition-colors ${showPip ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+                 className={`min-h-[44px] px-3 md:min-h-0 md:px-2 md:py-0.5 rounded transition-colors ${showPip ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
              >
                  CAMERA PIP
              </button>
          </div>
+  );
+
+  // One props object so the desktop panel, the phone drawer and the phone bar share it.
+  const recorderProps = {
+    isRecording: recorder.isRecording,
+    isPlaying: recorder.isPlaying,
+    isPaused: recorder.isPaused,
+    hasData: recorder.hasData,
+    frameCount: recorder.frameCount,
+    hasAudio: recorder.hasAudio,
+    durationMs: recorder.durationMs,
+    getPlaybackTimeMs: recorder.getPlaybackTimeMs,
+    onScrubStart: recorder.beginScrub,
+    onScrub: recorder.scrubTo,
+    onScrubEnd: recorder.endScrub,
+    onRecord: recorder.startRecording,
+    onStop: recorder.stopRecording,
+    onPlayToggle: recorder.togglePlayback,
+    onStopPlayback: recorder.stopPlayback,
+    onExport: recorder.exportData,
+    onImport: recorder.loadData,
+    // Also locks exports while recording (Stop Recording ignores busy).
+    busy: exportState !== null || recorder.isRecording,
+    primaryExport: { label: 'Video', onSelect: () => runExport('video') },
+    extraExports: [
+      { id: 'video', label: 'Video', hint: 'Puppet + your voice, as it plays', onSelect: () => runExport('video') },
+      { id: 'pack', label: 'Pack (.zip)', hint: 'Video + recording.json + audio', onSelect: () => runExport('pack') },
+    ],
+  };
+
+  return (
+    <div className="relative w-full h-full bg-[#090A0C] flex flex-col md:flex-row select-none">
+       {/* Top Header */}
+       <div className="absolute top-0 left-0 z-50 p-3 md:p-4 w-full flex justify-between items-center bg-gradient-to-b from-[#090A0C]/90 to-transparent pointer-events-none">
+         <div className="flex items-center gap-3 pointer-events-auto">
+           <button onClick={onBack} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-lg border border-white/15 transition-all text-xs font-mono text-white cursor-pointer min-h-[44px] md:min-h-0">
+             <ArrowLeft size={14} /> Hub
+           </button>
+           <span className="hidden md:inline text-xs font-mono tracking-wider text-gray-300 border-l border-white/15 pl-3">
+             Face Puppet &amp; Expressions
+           </span>
+         </div>
+
+         {/* Puppet Display Toggles */}
+         {!isPhone && displayToggles}
       </div>
 
       {/* Main Canvas View */}
-      <div className="flex-1 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
+      <div className="flex-1 min-h-0 mb-16 md:mb-0 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
           {!isCameraReady && !recorder.isPlaying && (
               <div className="text-white/70 animate-pulse flex flex-col items-center">
                   <ScanFace size={40} className="mb-3 text-[#EE3B2B]" />
@@ -311,8 +348,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
           
           {/* Picture-in-Picture Webcam (Minimized to bottom corner) */}
           {showPip && (
-              <div className="absolute bottom-8 left-8 z-30 pointer-events-auto bg-[#111317]/90 border border-white/15 rounded-lg p-2 shadow-2xl backdrop-blur-md">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 pb-1.5 mb-1 border-b border-white/10">
+              <div className="absolute top-16 right-3 md:top-auto md:right-auto md:bottom-8 md:left-8 z-30 pointer-events-auto bg-[#111317]/90 border border-white/15 rounded-lg p-1.5 md:p-2 shadow-2xl backdrop-blur-md">
+                  <div className="hidden md:flex items-center justify-between text-[10px] font-mono text-gray-400 pb-1.5 mb-1 border-b border-white/10">
                       <span className="flex items-center gap-1.5 text-white font-bold">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#EE3B2B] animate-pulse" />
                           INPUT CAM
@@ -325,12 +362,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                           <Minimize2 size={12} />
                       </button>
                   </div>
-                  <canvas ref={pipCanvasRef} className="w-48 h-32 rounded bg-black object-cover" />
+                  <canvas ref={pipCanvasRef} className="rounded bg-black block" style={{ width: 192, height: 128 }} />
               </div>
           )}
 
           {exportState && (
-              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex items-center gap-3 bg-[#111317]/95 border border-white/15 rounded-lg px-3 py-2 font-mono text-[11px] text-gray-200 shadow-2xl">
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-auto max-w-[92vw] flex-wrap justify-center flex items-center gap-3 bg-[#111317]/95 border border-white/15 rounded-lg px-3 py-2 font-mono text-[11px] text-gray-200 shadow-2xl">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#EE3B2B] animate-pulse" />
                   <span>
                       RENDERING {exportState.kind === 'pack' ? 'PACK' : 'VIDEO'}{' '}
@@ -347,38 +384,35 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
           )}
 
           {/* Recorder Controls Overlay */}
-          <div className="absolute bottom-8 right-8 pointer-events-auto z-30">
-               <RecorderControls 
-                  isRecording={recorder.isRecording}
-                  isPlaying={recorder.isPlaying}
-                  isPaused={recorder.isPaused}
-                  hasData={recorder.hasData}
-                  frameCount={recorder.frameCount}
-                  hasAudio={recorder.hasAudio}
-                  durationMs={recorder.durationMs}
-                  getPlaybackTimeMs={recorder.getPlaybackTimeMs}
-                  onScrubStart={recorder.beginScrub}
-                  onScrub={recorder.scrubTo}
-                  onScrubEnd={recorder.endScrub}
-                  onRecord={recorder.startRecording}
-                  onStop={recorder.stopRecording}
-                  onPlayToggle={recorder.togglePlayback}
-                  onStopPlayback={recorder.stopPlayback}
-                  onExport={recorder.exportData}
-                  onImport={recorder.loadData}
-                  // Also locks exports while recording (Stop Recording ignores busy).
-                  busy={exportState !== null || recorder.isRecording}
-                  primaryExport={{ label: 'Video', onSelect: () => runExport('video') }}
-                  extraExports={[
-                      { id: 'video', label: 'Video', hint: 'Puppet + your voice, as it plays', onSelect: () => runExport('video') },
-                      { id: 'pack', label: 'Pack (.zip)', hint: 'Video + recording.json + audio', onSelect: () => runExport('pack') },
-                  ]}
-               />
-          </div>
+          {!isPhone && (
+              <div className="absolute bottom-8 right-8 pointer-events-auto z-30">
+                  <RecorderControls {...recorderProps} />
+              </div>
+          )}
       </div>
 
-      {/* Sidebar Controls */}
-      <div className="w-full md:w-80 bg-[#0E1013] border-l border-white/10 p-5 flex flex-col overflow-y-auto shadow-2xl z-20 font-mono">
+      {/* Sidebar Controls (desktop side panel; phone bottom drawer) */}
+      <div
+          data-testid="controls-drawer"
+          className={`bg-[#0E1013] border-white/10 p-5 flex flex-col overflow-y-auto shadow-2xl font-mono
+            fixed inset-x-0 bottom-16 z-40 max-h-[65dvh] rounded-t-xl border-t touch-pan-y overscroll-contain transition-transform duration-200
+            ${controlsOpen ? 'translate-y-0' : 'translate-y-[130%] pointer-events-none'}
+            md:static md:translate-y-0 md:pointer-events-auto md:w-80 md:max-h-none md:rounded-none md:border-t-0 md:border-l md:z-20`}
+      >
+          {isPhone && (
+              <>
+                  <div className="flex items-center justify-between mb-3">
+                      <span className="text-white font-bold text-xs tracking-wider">CONTROLS</span>
+                      <button aria-label="Close controls" onClick={() => setControlsOpen(false)} className="w-11 h-11 flex items-center justify-center text-gray-300">
+                          <X size={18} />
+                      </button>
+                  </div>
+                  <div className="mb-4">{displayToggles}</div>
+                  <div className="mb-4">
+                      <RecorderControls {...recorderProps} showTransport={false} />
+                  </div>
+              </>
+          )}
           <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
               <span className="text-white font-bold text-xs tracking-wider flex items-center gap-2">
                   <Smile size={15} className="text-white" /> EXPRESSIONS &amp; BLENDSHAPES
@@ -403,7 +437,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      step={0.05}
                      value={faceSmoothing}
                      onChange={(e) => setFaceSmoothing(parseFloat(e.target.value))}
-                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] pl-range"
                      title="Left: responsive, a little jitter. Right: calm, a little lag."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
@@ -424,7 +458,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      step={0.05}
                      value={browBoost}
                      onChange={(e) => setBrowBoost(parseFloat(e.target.value))}
-                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] pl-range"
                      title="How far the puppet brows travel when you raise or lower yours."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
@@ -445,7 +479,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      step={0.05}
                      value={jawBoost}
                      onChange={(e) => setJawBoost(parseFloat(e.target.value))}
-                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] pl-range"
                      title="How readily the teeth part and the jaw drops when you talk."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
@@ -466,7 +500,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      step={0.05}
                      value={blinkBoost}
                      onChange={(e) => setBlinkBoost(parseFloat(e.target.value))}
-                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] pl-range"
                      title="How far your blinks close the puppet's lids; real blinks snap shut."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
@@ -487,7 +521,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                      step={5}
                      value={creaseAngle}
                      onChange={(e) => setCreaseAngle(parseFloat(e.target.value))}
-                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B]"
+                     className="w-full h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] pl-range"
                      title="Edges sharper than this angle stay hard; softer ones are smoothed."
                  />
                  <div className="flex justify-between text-[9px] text-gray-500 mt-1">
@@ -505,7 +539,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
                                  key={d}
                                  type="button"
                                  onClick={() => setMeshDetail(d)}
-                                 className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${meshDetail === d ? 'bg-[#EE3B2B] text-white' : 'bg-[#22242B] text-gray-400'}`}
+                                 className={`px-3 min-h-[44px] min-w-[56px] md:px-2 md:py-0.5 md:min-h-0 md:min-w-0 rounded text-[10px] font-bold tracking-wider ${meshDetail === d ? 'bg-[#EE3B2B] text-white' : 'bg-[#22242B] text-gray-400'}`}
                              >
                                  {d.toUpperCase()}
                              </button>
@@ -558,6 +592,24 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
              </div>
           </div>
       </div>
+
+      {isPhone && (
+          <PhoneBar
+              isRecording={recorder.isRecording}
+              isPlaying={recorder.isPlaying}
+              isPaused={recorder.isPaused}
+              hasData={recorder.hasData}
+              busy={exportState !== null || recorder.isRecording}
+              canFlip={false /* wired in Task 6 */}
+              controlsOpen={controlsOpen}
+              onRecord={recorder.startRecording}
+              onStop={recorder.stopRecording}
+              onPlayToggle={recorder.togglePlayback}
+              onStopPlayback={recorder.stopPlayback}
+              onFlip={() => {}}
+              onToggleControls={() => setControlsOpen((o) => !o)}
+          />
+      )}
     </div>
   );
 };

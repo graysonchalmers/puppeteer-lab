@@ -30,7 +30,7 @@ const App: React.FC = () => {
   const back = () => setMode('home');
 
   return (
-    <div className="w-full h-screen bg-[#090A0C] overflow-hidden text-[#EDEDED] font-sans selection:bg-[#EE3B2B] selection:text-white">
+    <div className="w-full h-[100dvh] bg-[#090A0C] overflow-hidden text-[#EDEDED] font-sans selection:bg-[#EE3B2B] selection:text-white">
       {mode === 'home' && <DemoHub onSelectMode={setMode} />}
 
       {mode !== 'home' && (

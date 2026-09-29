@@ -31,6 +31,8 @@ interface RecorderControlsProps {
     extraExports?: { id: string; label: string; hint: string; onSelect: () => void }[];
     /** Disables every control (e.g. while a video export renders). */
     busy?: boolean;
+    /** Hide the record/play buttons (the phone bottom bar owns them). Default true. */
+    showTransport?: boolean;
 }
 
 const fmt = (ms: number) => {
@@ -69,7 +71,8 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     onImport,
     primaryExport,
     extraExports,
-    busy = false
+    busy = false,
+    showTransport = true
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showExportMenu, setShowExportMenu] = useState(false);
@@ -97,6 +100,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
             </div>
 
             {/* Main Transport Controls */}
+            {showTransport && (
             <div className="flex items-center justify-center gap-4 my-1">
                 {/* Record / Stop */}
                 {!isRecording ? (
@@ -144,6 +148,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     </button>
                 )}
             </div>
+            )}
 
             {/* Scrubber */}
             <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
@@ -158,7 +163,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     onChange={(e) => onScrub(parseFloat(e.target.value))}
                     onPointerUp={onScrubEnd}
                     onPointerCancel={onScrubEnd}
-                    className="flex-1 h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] disabled:opacity-30"
+                    className="flex-1 h-1.5 bg-[#22242B] rounded-lg appearance-none cursor-pointer accent-[#EE3B2B] disabled:opacity-30 pl-range"
                     title="Scrub"
                 />
                 <PlaybackClock getTimeMs={getPlaybackTimeMs} durationMs={durationMs} active={isPlaying} />
@@ -171,7 +176,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     <button
                         onClick={() => (primaryExport ? primaryExport.onSelect() : onExport('full'))}
                         disabled={!hasData || busy}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 hover:bg-white/10 text-[11px] font-mono text-gray-200 transition-colors disabled:opacity-30"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 hover:bg-white/10 text-[11px] font-mono text-gray-200 transition-colors disabled:opacity-30 min-h-[44px] md:min-h-0"
                         title="Export Full Session Bundle (.json)"
                     >
                         <Download size={13} /> {primaryExport?.label ?? 'Export'}
@@ -179,7 +184,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     <button
                         onClick={() => setShowExportMenu(!showExportMenu)}
                         disabled={!hasData || busy}
-                        className="px-2 border-l border-white/10 hover:bg-white/10 text-gray-300 disabled:opacity-30"
+                        className="px-2 border-l border-white/10 hover:bg-white/10 text-gray-300 disabled:opacity-30 min-w-[44px] md:min-w-0"
                         title="Export Formats"
                     >
                         <ChevronDown size={13} />
@@ -190,7 +195,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={busy}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-mono text-gray-200 border border-white/10 transition-colors disabled:opacity-30"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] font-mono text-gray-200 border border-white/10 transition-colors disabled:opacity-30 min-h-[44px] md:min-h-0"
                 >
                     <Upload size={13} /> Load JSON
                 </button>
@@ -215,7 +220,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                             <button
                                 key={x.id}
                                 onClick={() => { x.onSelect(); setShowExportMenu(false); }}
-                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200"
+                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200 min-h-[44px] md:min-h-0"
                             >
                                 <Film size={13} className="text-[#EE3B2B]" />
                                 <div>
@@ -226,7 +231,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                         ))}
                         <button
                             onClick={() => { onExport('full'); setShowExportMenu(false); }}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200"
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200 min-h-[44px] md:min-h-0"
                         >
                             <FileJson size={13} className="text-white" />
                             <div>
@@ -236,7 +241,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                         </button>
                         <button
                             onClick={() => { onExport('kinematics'); setShowExportMenu(false); }}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200"
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200 min-h-[44px] md:min-h-0"
                         >
                             <Activity size={13} className="text-gray-300" />
                             <div>
@@ -247,7 +252,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                         {hasAudio && (
                             <button
                                 onClick={() => { onExport('audio'); setShowExportMenu(false); }}
-                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200 border-t border-white/10 mt-0.5 pt-1.5"
+                                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/10 text-left text-gray-200 border-t border-white/10 mt-0.5 pt-1.5 min-h-[44px] md:min-h-0"
                             >
                                 <Music size={13} className="text-white" />
                                 <div>
