@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/vendor-assets.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
+    "phone-check": "npm run build && node scripts/phone-check.mjs",
     "stamp": "node scripts/build-stamp.mjs --print"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^5.0.0",
     "delaunator": "^5.1.0",
+    "playwright": "^1.63.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^5.0.0"
