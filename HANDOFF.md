@@ -19,6 +19,8 @@ Deployed and dark-launched. **To turn uploads on:** pick the public removal addr
 2. Alternative: **real-iPhone run** (start card, one prompt, Record without a prompt, backgrounding, plus Save & get link, Copy, Share sheet, `?debug` numbers still owed from 2026-09-29).
 3. Alternative: **Phase 2 email** (Resend, link only, fixed template, per-IP and per-address limits): needs an account, verified sender DNS and an API key.
 
+**Full ordered roadmap with the reasoning: `docs/SHARE_LINKS_ROADMAP.md`** (turn on and prove live, get data off the box and backed up, real-phone run, actually use the archive, phase-2 email, link previews, other demos, hardening backlog).
+
 ## ❓ Open questions
 - **`CONTACT_EMAIL`** (public removal address): undecided.
 - **Is about 2 minutes enough?** The 50 MB cap is roughly at most 150 s of a Face Puppet take (real frames carry about 52 blendshapes plus hands, so the true ceiling is shorter). The client refuses oversize takes with a plain message before uploading. Raise the cap or thin the frames if it bites.

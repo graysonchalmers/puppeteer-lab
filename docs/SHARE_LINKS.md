@@ -1,6 +1,6 @@
 # Share links (server storage)
 
-Face Puppet's **Save & get link** uploads a take to a small API and returns `/t/<id>`, a page that plays the take back and offers the JSON for **24 hours**. Every saved take is kept in a private archive and never deleted by the app. Decisions and rationale: `docs/superpowers/specs/2026-09-30-share-links-design.md`.
+Face Puppet's **Save & get link** uploads a take to a small API and returns `/t/<id>`, a page that plays the take back and offers the JSON for **24 hours**. Every saved take is kept in a private archive and never deleted by the app. Decisions and rationale: `docs/superpowers/specs/2026-09-30-share-links-design.md`. Thinking, trade-offs and the ordered to-do list: `docs/SHARE_LINKS_ROADMAP.md`.
 
 ## Pieces
 | Piece | Where |
