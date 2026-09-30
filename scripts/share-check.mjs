@@ -4,12 +4,14 @@
  *   - Face Puppet: Save & get link is disabled until a take is loaded, then uploads and shows a /t/<id> link + disclosure;
  *   - the link page plays the take, shows the expiry, links a JSON download; an unknown id shows "can't find";
  *   - the admin endpoint lists the take (and refuses a missing token); scripts/Pull-Takes.ps1 pulls it;
- *   - the viewer fits an iPhone-sized WebKit window (no sideways scroll, Play reachable).
+ *   - the viewer fits an iPhone-sized WebKit window (no sideways scroll, Play reachable);
+ *   - Face Puppet on an iPhone-sized WebKit window: Save & get link from the Controls drawer, and the link survives
+ *     rotating to landscape (the desktop layout remounts the recorder panel).
  * Screenshots go to $PROOF_DIR or .proof/<date>-share-links/ (gitignored). Needs network (Tailwind CDN).
  * Ports: $SHARE_CHECK_API_PORT (8791) and $SHARE_CHECK_PORT (4174); a busy port is refused.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium, webkit, devices } from 'playwright';
@@ -27,6 +29,12 @@ const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok: !!ok });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '   ' + detail : ''}`);
+};
+
+/** "mm:ss.d / mm:ss.d" -> ms of the first clock. */
+const clockMs = (text) => {
+  const m = /(\d+):(\d+)\.(\d)/.exec(text);
+  return m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 + Number(m[3]) * 100 : NaN;
 };
 
 const children = [];
@@ -96,17 +104,22 @@ async function main() {
     const dl = await viewer.request.get(new URL(href, WEB).toString());
     check('the download is the recording', (await dl.json()).schema === 'puppeteer-lab/recording');
     const stage = viewer.getByTestId('take-canvas');
+    await viewer.waitForTimeout(300); // let the first frames settle so `before` is the paused pose, not a half-drawn one
     const before = await stage.screenshot();
+    const clockBefore = clockMs(await viewer.getByTestId('take-clock').innerText());
     await viewer.getByTestId('take-play').click();
     await viewer.waitForTimeout(700);
     const after = await stage.screenshot();
-    check('Play animates the puppet', !before.equals(after));
+    const clockAfter = clockMs(await viewer.getByTestId('take-clock').innerText());
+    check('Play animates the puppet (clock advances, stage changes)', clockAfter > clockBefore && !before.equals(after), `clock ${clockBefore} -> ${clockAfter} ms`);
     await viewer.screenshot({ path: path.join(OUT, '02-viewer-desktop.png') });
     check('no page errors on the viewer', errors.length === 0, errors.join(' | '));
 
     const missing = await (await chrome.newContext()).newPage();
     await missing.goto(`${WEB}/t/${'a'.repeat(22)}`);
     check('an unknown id says it cannot find the take', /can't find that take/i.test(await missing.getByTestId('take-state').innerText()));
+    await missing.goto(`${WEB}/t/${'a'.repeat(10)}`);
+    check('a cut-off link opens the viewer and says it cannot find the take', /can't find that take/i.test(await missing.getByTestId('take-state').innerText()));
   } finally {
     await chrome.close();
   }
@@ -122,6 +135,11 @@ async function main() {
   else {
     const files = existsSync(pulledDir) ? readdirSync(pulledDir) : [];
     check('Pull-Takes.ps1 pulled the recording and its meta', pull.status === 0 && files.some((f) => f.endsWith('.meta.json')) && files.some((f) => f.endsWith('.json') && !f.endsWith('.meta.json')), pull.stderr.trim().split('\n')[0]);
+    const metaFile = files.find((f) => f.endsWith('.meta.json'));
+    let meta = null;
+    try { meta = metaFile ? JSON.parse(readFileSync(path.join(pulledDir, metaFile), 'utf8')) : null; } catch { /* a BOM or torn file fails here */ }
+    check('the pulled meta is plain JSON (no BOM) with the take id', !!meta && meta.id === list.takes[0].id);
+    check('the pull script left no .part file', !files.some((f) => f.endsWith('.part')));
   }
 
   // 4. iPhone-sized WebKit: the viewer fits (layout only; WebKit has no camera here).
@@ -141,6 +159,43 @@ async function main() {
     check('iPhone: no page errors', errors.length === 0, errors.join(' | '));
   } finally {
     await wk.close();
+  }
+
+  // 5. Face Puppet on an iPhone-sized WebKit window: Save from the Controls drawer, then rotate (the link must stay).
+  const wk2 = await webkit.launch();
+  try {
+    const page = await (await wk2.newContext({ ...devices['iPhone 13'] })).newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('dialog', (d) => d.accept());
+    await page.goto(WEB);
+    const save = page.getByTestId('save-link-button');
+    await save.waitFor({ state: 'attached', timeout: 20000 });
+    check('iPhone: Face Puppet uses the phone layout', (await page.getByTestId('phone-bar').count()) === 1);
+    await page.setInputFiles('input[type=file]', FIXTURE);
+    await page.waitForFunction(() => !document.querySelector('[data-testid=save-link-button]').disabled, null, { timeout: 15000 });
+    await page.getByRole('button', { name: 'Controls', exact: true }).click();
+    await save.click();
+    const urlBox = page.getByTestId('save-link-url');
+    await urlBox.waitFor({ timeout: 15000 });
+    const phoneLink = await urlBox.inputValue();
+    check('iPhone: Save & get link returns a /t/<id> link', /\/t\/[A-Za-z0-9_-]{22}$/.test(phoneLink), phoneLink);
+    await page.screenshot({ path: path.join(OUT, '04-phone-save-link-webkit.png') });
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForFunction(() => !document.querySelector('[data-testid=phone-bar]'), null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(1500); // long enough for a remounted panel to refetch /api/config and show a fresh Save button
+    const desktopLayout = await page.evaluate(() => window.matchMedia('(min-width: 768px)').matches && !document.querySelector('[data-testid=phone-bar]'));
+    check('iPhone rotated: the desktop layout mounted (phone bar gone)', desktopLayout);
+    const shown = (await page.getByTestId('save-link-url').count()) === 1 ? await page.getByTestId('save-link-url').inputValue() : '';
+    check('iPhone rotated: the same link is still shown', shown === phoneLink, shown || '(no link box)');
+    check('iPhone rotated: no Save button to archive a second copy', (await page.getByTestId('save-link-button').count()) === 0);
+    await page.screenshot({ path: path.join(OUT, '05-phone-rotated-link-persists.png') });
+    const after = await (await fetch(`${API}/api/admin/takes`, { headers: { Authorization: `Bearer ${TOKEN}` } })).json();
+    check('the server holds exactly the two saved takes', after.count === 2, `count=${after.count}`);
+    check('iPhone Face Puppet: no page errors', errors.length === 0, errors.join(' | '));
+  } finally {
+    await wk2.close();
   }
 }
 
