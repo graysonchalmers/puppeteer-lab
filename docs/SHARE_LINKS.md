@@ -7,7 +7,7 @@ Face Puppet's **Save & get link** uploads a take to a small API and returns `/t/
 |---|---|
 | API (Node 22, no npm deps) | `server/` (`app.mjs` routes, `store.mjs` files, `validate.mjs`, `rateLimit.mjs`, `config.mjs`) |
 | Client | `hooks/useSaveLink.ts` (state, owned by FaceDemo so a phone rotation keeps the link), `components/SaveLink.tsx` (view), `components/TakeViewer.tsx`, `components/shared/takeApi.ts`, `takeShape.ts`, `appRoute.ts` (`isTakePath`, `resolveTakeId`) |
-| Container | `server/Dockerfile`, `server/compose.yaml` (loopback port 3016, bind mount `/home/grayson/mocap-data`) |
+| Container | `server/Dockerfile`, `server/compose.yaml` (loopback port 3017, bind mount `/home/grayson/mocap-data`) |
 | Pull to this PC | `scripts/Pull-Takes.ps1` -> `data/takes/` (gitignored) |
 | Gate | `npm run share-check` (real server + vite preview + Chromium + WebKit) |
 
@@ -33,10 +33,10 @@ The bind mount must be writable by the container user (`node`, uid 1000) **befor
 - Not built yet: email the link (phase 2, Resend, link only), self-serve delete, the other four demos, audio-offset sync in the viewer.
 
 ## Deploy checklist (Task 7, needs Grayson's go-ahead)
-- [ ] Caddy: `handle /api/*` (NOT `handle_path`, which strips `/api` and breaks every route) reverse-proxies to `127.0.0.1:3016`.
+- [ ] Caddy: `handle /api/*` (NOT `handle_path`, which strips `/api` and breaks every route) reverse-proxies to `127.0.0.1:3017`.
 - [ ] Caddy: `/t/*` serves the SPA's `index.html` (`try_files {path} /index.html` in the static `file_server` block, or a rewrite), so a shared link opens the viewer instead of a 404.
 - [ ] `server/.env.local` on the box has `CONTACT_EMAIL`, `ADMIN_TOKEN` and `IP_SALT` (and not `PORT`/`DATA_DIR`).
-- [ ] Port 3016 is free on the box before `docker compose up`.
+- [ ] Port 3017 is free on the box before `docker compose up`.
 - [ ] `/home/grayson/mocap-data` exists and is owned by 1000:1000 (see Data layout).
 - [ ] `docker compose build` verified on the box: Docker was not available where this was built, so the image has never been built.
 - [ ] Measure one max-size (50 MB) upload inside the container (`docker stats`) before announcing; raise `mem_limit` to ~1g if you want `MAX_CONCURRENT_UPLOADS=2`.

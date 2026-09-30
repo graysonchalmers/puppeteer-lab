@@ -6,7 +6,7 @@ services:
     mem_limit: 512m
     ports:
       # Loopback only: Caddy on the same box is the only client, and the rate limiter trusts X-Forwarded-For because of that.
-      - "127.0.0.1:3016:8787"
+      - "127.0.0.1:3017:8787"
     env_file:
       - .env.local
     environment:
