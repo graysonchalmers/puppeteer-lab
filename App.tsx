@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AppMode } from './types';
-import { resolveInitialMode, withDemoParam } from './appRoute';
+import { resolveInitialMode, resolveTakeId, withDemoParam } from './appRoute';
 import IdleOverlay from './components/IdleOverlay';
 
 // Face Puppet is the default landing demo (no params); ?demo=<id> deep-links to another one and
@@ -18,6 +18,7 @@ const AirCanvas = lazy(() => import('./components/aircanvas/AirCanvas'));
 const HandTelemetry = lazy(() => import('./components/telemetry/HandTelemetry'));
 const MotionRecorder = lazy(() => import('./components/MotionRecorder'));
 const FaceDemo = lazy(() => import('./components/FaceDemo'));
+const TakeViewer = lazy(() => import('./components/TakeViewer'));
 
 const DemoFallback: React.FC = () => (
   <div className="w-full h-full flex items-center justify-center text-[#EDEDED]/60 text-sm font-mono tracking-wider">
@@ -25,7 +26,7 @@ const DemoFallback: React.FC = () => (
   </div>
 );
 
-const App: React.FC = () => {
+const Lab: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(() => resolveInitialMode(window.location.search));
   // Keep the URL in step with the demo (replace, not push) so a copied address reopens the same demo; other params (?debug) stay.
   const select = useCallback((next: AppMode) => {
@@ -49,6 +50,18 @@ const App: React.FC = () => {
         {mode === 'face' && <FaceDemo onSelectMode={select} />}
       </Suspense>
       {mode !== 'home' && <IdleOverlay />}
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  const takeId = useMemo(() => resolveTakeId(window.location.pathname), []);
+  if (!takeId) return <Lab />;
+  return (
+    <div className="w-full h-[100dvh] bg-[#090A0C] overflow-hidden text-[#EDEDED] font-sans">
+      <Suspense fallback={<DemoFallback />}>
+        <TakeViewer id={takeId} />
+      </Suspense>
     </div>
   );
 };
