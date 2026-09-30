@@ -41,3 +41,6 @@ The bind mount must be writable by the container user (`node`, uid 1000) **befor
 - [ ] `docker compose build` verified on the box: Docker was not available where this was built, so the image has never been built.
 - [ ] Measure one max-size (50 MB) upload inside the container (`docker stats`) before announcing; raise `mem_limit` to ~1g if you want `MAX_CONCURRENT_UPLOADS=2`.
 - [ ] After start: `GET /api/health` and `/api/config` through Caddy, one real save from a phone, the link opens, `Pull-Takes.ps1` pulls it.
+
+## Deploy record
+2026-09-30: deployed to apps-01 dark (uploads off). Container `mocap-api-mocap-api-1`, `127.0.0.1:3017`, app dir `/home/grayson/apps/mocap-api`, data `/home/grayson/mocap-data`, `.env.local` with generated `ADMIN_TOKEN`/`IP_SALT` and empty `CONTACT_EMAIL`. Caddy: `handle /api/*` -> container, `handle /t/*` -> SPA index, default -> static. To enable uploads set `CONTACT_EMAIL` in `.env.local` and `sudo docker compose up -d --force-recreate`. To update the API: `git archive --format=tar HEAD:server | ssh grayson@<host> 'tar -x -C /home/grayson/apps/mocap-api'` then `sudo docker compose up -d --build` (keeps `.env.local`).
