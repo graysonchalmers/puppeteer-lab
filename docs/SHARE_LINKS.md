@@ -15,7 +15,7 @@ Face Puppet's **Save & get link** uploads a take to a small API and returns `/t/
 `GET /api/health`, `GET /api/config`, `POST /api/takes` (JSON, optional `Content-Encoding: gzip`), `GET /api/takes/:id` (`?download=1`), `GET /api/admin/takes`, `GET /api/admin/takes/:id/file` (bearer `ADMIN_TOKEN`). Error codes are in `server/app.mjs`. Take files are streamed, never buffered whole; at most `MAX_CONCURRENT_UPLOADS` uploads are read at once and the next gets `503 busy` with `Retry-After: 5`.
 
 ## Environment (`server/.env.local` on the box, never committed, never echoed)
-`CONTACT_EMAIL` (**required**: uploads are refused while it is empty; shown in the disclosure), `ADMIN_TOKEN` (enables the admin endpoints), `IP_SALT` (**set it**: without it IP hashes use the public default salt and the server warns at startup), and optional overrides `MAX_TAKE_BYTES` (50 MB), `MAX_UPLOADS_PER_IP_DAY` (30), `LINK_TTL_HOURS` (24), `QUOTA_MB` (10240), `MAX_CONCURRENT_UPLOADS` (2; each upload can briefly cost about 4x its size in memory, and the container has `mem_limit: 512m`).
+`CONTACT_EMAIL` (**required**: uploads are refused while it is empty; shown in the disclosure), `ADMIN_TOKEN` (enables the admin endpoints), `IP_SALT` (**set it**: without it IP hashes use the public default salt and the server warns at startup), and optional overrides `MAX_TAKE_BYTES` (50 MB), `MAX_UPLOADS_PER_IP_DAY` (30), `LINK_TTL_HOURS` (24), `QUOTA_MB` (10240), `MAX_CONCURRENT_UPLOADS` (1; one 50 MB take costs about 200 MB of heap to parse and the compose `mem_limit` is 512m).
 
 Under compose, `PORT` (8787), `HOST` and `DATA_DIR` (`/data`) are fixed in `compose.yaml` (`environment` wins over `env_file`): do not set them in `.env.local`. They matter only for `npm run server` locally.
 
@@ -39,4 +39,5 @@ The bind mount must be writable by the container user (`node`, uid 1000) **befor
 - [ ] Port 3016 is free on the box before `docker compose up`.
 - [ ] `/home/grayson/mocap-data` exists and is owned by 1000:1000 (see Data layout).
 - [ ] `docker compose build` verified on the box: Docker was not available where this was built, so the image has never been built.
+- [ ] Measure one max-size (50 MB) upload inside the container (`docker stats`) before announcing; raise `mem_limit` to ~1g if you want `MAX_CONCURRENT_UPLOADS=2`.
 - [ ] After start: `GET /api/health` and `/api/config` through Caddy, one real save from a phone, the link opens, `Pull-Takes.ps1` pulls it.

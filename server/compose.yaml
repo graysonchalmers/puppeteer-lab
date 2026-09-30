@@ -2,7 +2,7 @@ services:
   mocap-api:
     build: .
     restart: unless-stopped
-    # Shared 2 GB box: an upload can briefly cost ~4x its size, so cap the container rather than starve its neighbours.
+    # Shared 2 GB box: one max-size (50 MB) upload costs ~200 MB of heap to parse, so MAX_CONCURRENT_UPLOADS defaults to 1. Raise this to ~1g before allowing 2.
     mem_limit: 512m
     ports:
       # Loopback only: Caddy on the same box is the only client, and the rate limiter trusts X-Forwarded-For because of that.

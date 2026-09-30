@@ -11,7 +11,7 @@ describe('loadConfig', () => {
     expect(c.contactEmail).toBe('');
     expect(c.adminToken).toBe('');
     expect(c.host).toBe('127.0.0.1');
-    expect(c.maxConcurrentUploads).toBe(2);
+    expect(c.maxConcurrentUploads).toBe(1);
   });
 
   it('reads overrides', () => {
@@ -24,6 +24,6 @@ describe('loadConfig', () => {
     expect(c.port).toBe(8787);
     expect(c.maxBytes).toBe(50 * 1024 * 1024);
     expect(c.maxPerIpPerDay).toBe(30);
-    expect(c.maxConcurrentUploads).toBe(2);
+    expect(c.maxConcurrentUploads).toBe(1);
   });
 });

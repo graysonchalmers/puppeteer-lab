@@ -7,6 +7,8 @@ import { createApp } from './app.mjs';
 const config = loadConfig();
 const store = createStore({ dataDir: config.dataDir, linkTtlMs: config.linkTtlMs });
 const server = http.createServer(createApp({ config, store }));
+// A slow mobile upload of a ~16 MB gzip still fits in 180 s; stalled clients must not hold the only upload slot for Node's default 5 minutes.
+server.requestTimeout = 180_000;
 
 server.listen(config.port, config.host, () => {
   console.log(`[mocap] listening on ${config.host}:${config.port}, data in ${config.dataDir}`);
