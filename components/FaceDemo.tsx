@@ -5,10 +5,14 @@
 */
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { ArrowLeft, User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2, X } from 'lucide-react';
+import { User, Eye, Smile, ScanFace, Video, VideoOff, Maximize2, Minimize2, X } from 'lucide-react';
 import { useTracker } from '../hooks/useTracker';
 import { useIsPhone } from '../hooks/useIsPhone';
+import { PermState, planStart, readPermissions } from '../hooks/cameraAccess';
 import PhoneBar from './PhoneBar';
+import DemoSwitcher from './DemoSwitcher';
+import { StartCard, IssueCard, LostCard, MicNote } from './CameraPanels';
+import { AppMode } from '../types';
 import DebugReadout from './DebugReadout';
 import { pipDims } from './face/pipSize';
 import { createFpsMeter } from './shared/fpsMeter';
@@ -28,7 +32,7 @@ import { FrameData } from '../types';
 import { holdAwake } from './shared/idle';
 
 interface FaceDemoProps {
-  onBack: () => void;
+  onSelectMode: (mode: AppMode) => void;
 }
 
 // Key Blendshapes to visualize (out of 52 available) - Monochromatic NASA spec
@@ -42,14 +46,38 @@ const DISPLAY_BLENDSHAPES = [
     { key: 'eyeLookUp', label: 'Look Up' },
 ];
 
-const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
+const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [faceSmoothing, setFaceSmoothing] = useState(0.5);
   const [facing, setFacing] = useState<Facing>('user');
-  const { frameRef, isReady: isCameraReady, error, retry, activeFacing, canFlip, delegate, statsRef } =
-    useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing });
+
+  // Permission flow: the camera (and, if wanted, the microphone in the SAME request) starts from one tap on the
+  // start card. If the browser already granted everything the start would ask for, skip the card (no prompt can appear).
+  const [started, setStarted] = useState(false);
+  const [micWanted, setMicWanted] = useState(true);
+  const [perms, setPerms] = useState<{ camera: PermState; microphone: PermState } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    readPermissions(typeof navigator !== 'undefined' ? navigator.permissions : null).then((p) => {
+      if (!alive) return;
+      setPerms(p);
+      if (planStart({ ...p, wantMic: true }).autoStart) setStarted(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const micBlocked = perms?.microphone === 'denied';
+  const askForMic = micWanted && !micBlocked;
+
+  const {
+    frameRef, isReady: isCameraReady, retry, activeFacing, canFlip, delegate, statsRef,
+    status, cameraIssue, modelError, micStatus, audioStreamRef, enableMic, skipMic,
+  } = useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing, enabled: started, audio: askForMic });
+  const error = modelError; // camera problems have their own card (cameraIssue)
+  const soundOn = micStatus === 'on';
   const [browBoost, setBrowBoost] = useState(0.5);
   const [jawBoost, setJawBoost] = useState(0.75);
   const [blinkBoost, setBlinkBoost] = useState(0.5);
@@ -59,7 +87,18 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
   const videoAspectRef = useRef(4 / 3);
 
   // Recorder Hook
-  const recorder = useRecorder('FACE');
+  const recorder = useRecorder('FACE', audioStreamRef); // takes use the mic the camera request already got: no prompt on Record
+
+  // The camera died mid-take (OS or another app): end the take cleanly and keep what was captured.
+  const [takeCut, setTakeCut] = useState(false);
+  useEffect(() => {
+    if (status === 'lost' && recorder.isRecording) {
+      recorder.stopRecording();
+      setTakeCut(true);
+    } else if (status !== 'lost') {
+      setTakeCut(false);
+    }
+  }, [status, recorder.isRecording]);
 
   const [blendshapes, setBlendshapes] = useState<Record<string, number>>({});
   const lastBlendMsRef = useRef(0);
@@ -209,7 +248,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
-              if (!currentLandmarks && !exportFrameRef.current && !recorder.isPlaying) {
+              if (!currentLandmarks && !exportFrameRef.current && !recorder.isPlaying && isCameraReady) {
                   ctx.fillStyle = '#4B5563';
                   ctx.font = '12px monospace';
                   ctx.textAlign = 'center';
@@ -343,7 +382,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
     onScrubStart: recorder.beginScrub,
     onScrub: recorder.scrubTo,
     onScrubEnd: recorder.endScrub,
-    onRecord: recorder.startRecording,
+    onRecord: () => { if (isCameraReady) recorder.startRecording(); },
+    recordDisabled: !isCameraReady,
+    withAudio: soundOn,
     onStop: recorder.stopRecording,
     onPlayToggle: recorder.togglePlayback,
     onStopPlayback: recorder.stopPlayback,
@@ -363,9 +404,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
        {/* Top Header */}
        <div className="absolute top-0 left-0 z-50 p-3 md:p-4 w-full flex justify-between items-center bg-gradient-to-b from-[#090A0C]/90 to-transparent pointer-events-none">
          <div className="flex items-center gap-3 pointer-events-auto">
-           <button onClick={onBack} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-lg border border-white/15 transition-all text-xs font-mono text-white cursor-pointer min-h-[44px] md:min-h-0">
-             <ArrowLeft size={14} /> Hub
-           </button>
+           <DemoSwitcher current="face" isPhone={isPhone} onSelect={onSelectMode} />
            <span className="hidden md:inline text-xs font-mono tracking-wider text-gray-300 border-l border-white/15 pl-3">
              Face Puppet &amp; Expressions
            </span>
@@ -377,19 +416,25 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
 
       {/* Main Canvas View */}
       <div className="flex-1 min-h-0 mb-28 md:mb-0 relative bg-[#090A0C] flex items-center justify-center overflow-hidden">
-          {!isCameraReady && !recorder.isPlaying && !error && (
-              <div className="text-white/70 animate-pulse flex flex-col items-center">
+          {started && status === 'starting' && !recorder.isPlaying && (
+              <div data-testid="camera-starting" className="text-white/70 animate-pulse flex flex-col items-center px-6 text-center">
                   <ScanFace size={40} className="mb-3 text-[#EE3B2B]" />
-                  <p className="font-mono text-xs tracking-wider">INITIALIZING 478-POINT FACIAL MATRIX...</p>
+                  <p className="font-mono text-xs tracking-wider">STARTING CAMERA...</p>
+                  <p className="font-mono text-[10px] text-gray-500 mt-2">If your browser asks, choose Allow.</p>
               </div>
           )}
-          {error && (
+          {!started && perms !== null && !recorder.isPlaying && (
+              <StartCard micWanted={micWanted} micBlocked={micBlocked} onMicChange={setMicWanted} onStart={() => setStarted(true)} />
+          )}
+          {cameraIssue && <IssueCard issue={cameraIssue} onRetry={retry} onSkipMic={() => { setMicWanted(false); skipMic(); }} />}
+          {status === 'lost' && <LostCard onResume={retry} wasRecording={takeCut} />}
+          {error && !cameraIssue && (
               <div className="absolute inset-x-4 top-20 md:top-16 z-40 mx-auto max-w-md pointer-events-auto flex flex-col items-center gap-3 bg-[#111317]/95 border border-[#EE3B2B]/40 rounded-lg p-4 text-center">
                   <p className="text-[#EE3B2B] font-mono text-xs leading-relaxed">{error}</p>
                   <button onClick={retry} className="min-h-[44px] px-6 rounded-lg bg-[#EE3B2B] text-white font-mono text-xs font-bold">Retry</button>
               </div>
           )}
-          {!error && delegate === 'CPU' && (
+          {!error && !cameraIssue && delegate === 'CPU' && (
               <p className="absolute top-14 left-1/2 -translate-x-1/2 z-30 font-mono text-[10px] text-amber-300/80 text-center px-4">
                   Compatibility mode (CPU tracking): it may run slower.
               </p>
@@ -399,7 +444,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
           
           {/* Picture-in-Picture Webcam (Minimized to bottom corner) */}
-          {showPip && !error && (
+          {showPip && started && !error && !cameraIssue && status !== 'lost' && (
               <div className="absolute top-16 right-3 md:top-auto md:right-auto md:bottom-8 md:left-8 z-30 pointer-events-auto bg-[#111317]/90 border border-white/15 rounded-lg p-1.5 md:p-2 shadow-2xl backdrop-blur-md">
                   <div className="hidden md:flex items-center justify-between text-[10px] font-mono text-gray-400 pb-1.5 mb-1 border-b border-white/10">
                       <span className="flex items-center gap-1.5 text-white font-bold">
@@ -440,6 +485,13 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               <div className="absolute bottom-8 right-8 pointer-events-auto z-30">
                   <RecorderControls {...recorderProps} />
               </div>
+          )}
+
+          {started && isCameraReady && (
+              <MicNote
+                  status={micStatus === 'on' ? 'on' : micBlocked ? 'unavailable' : micStatus}
+                  onEnable={() => { setMicWanted(true); enableMic(); }}
+              />
           )}
 
           {debug && <DebugReadout getLine={debugLine} />}
@@ -656,13 +708,15 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onBack }) => {
               busy={exportState !== null || recorder.isRecording}
               canFlip={canFlip}
               controlsOpen={controlsOpen}
-              onRecord={recorder.startRecording}
+              onRecord={() => { if (isCameraReady) recorder.startRecording(); }}
+              recordDisabled={!isCameraReady}
+              withAudio={soundOn}
               onStop={recorder.stopRecording}
               onPlayToggle={recorder.togglePlayback}
               onStopPlayback={recorder.stopPlayback}
-              flipDisabled={!isCameraReady}
+              flipDisabled={status === 'starting' || status === 'idle'}
               onFlip={() => {
-                  if (recorder.isRecording || recorder.isPlaying || exportState !== null || !isCameraReady) return;
+                  if (recorder.isRecording || recorder.isPlaying || exportState !== null || status === 'starting' || status === 'idle') return;
                   setFacing((f) => (f === 'user' ? 'environment' : 'user'));
               }}
               onToggleControls={() => setControlsOpen((o) => !o)}

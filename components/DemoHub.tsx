@@ -18,9 +18,11 @@ import {
   Share2,
   Eye,
   Disc,
-  RotateCcw
+  RotateCcw,
+  ArrowLeft
 } from 'lucide-react';
 import { AppMode } from '../types';
+import { useIsPhone } from '../hooks/useIsPhone';
 
 interface DemoHubProps {
   onSelectMode: (mode: AppMode) => void;
@@ -175,6 +177,7 @@ const DEMO_SECTIONS: DemoSection[] = [
 ];
 
 const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
+  const isPhone = useIsPhone();
   return (
     <div className="relative w-full h-screen max-h-screen flex flex-col bg-[#090A0C] text-[#EDEDED] font-sans overflow-hidden select-none">
       {/* Subtle background grid pattern */}
@@ -204,10 +207,17 @@ const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-gray-400">
-          <span className="px-2.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 text-[11px]">
+        <div className="flex items-center gap-2 text-xs font-mono text-gray-400">
+          <span className="hidden sm:inline px-2.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 text-[11px]">
             Zero-Hardware Webcam Tracking
           </span>
+          <button
+            type="button"
+            onClick={() => onSelectMode('face')}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-lg border border-white/15 text-xs font-mono text-white cursor-pointer min-h-[44px] md:min-h-0"
+          >
+            <ArrowLeft size={14} /> Face Puppet
+          </button>
         </div>
       </header>
 
@@ -252,6 +262,9 @@ const DemoHub: React.FC<DemoHubProps> = ({ onSelectMode }) => {
               >
                 {section.actionLabel} <ChevronRight size={13} />
               </button>
+              {isPhone && section.id !== 'face' && (
+                <p className="-mt-2 mb-2 text-[10px] font-mono text-gray-500">Desktop recommended</p>
+              )}
 
               {/* Description */}
               <p className="text-[11px] text-gray-400 mb-3 leading-snug font-sans shrink-0 min-h-[32px]">

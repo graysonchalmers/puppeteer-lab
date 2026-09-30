@@ -31,6 +31,10 @@ interface RecorderControlsProps {
     extraExports?: { id: string; label: string; hint: string; onSelect: () => void }[];
     /** Disables every control (e.g. while a video export renders). */
     busy?: boolean;
+    /** Record needs a live camera (Face Puppet before Start / while the camera is down). */
+    recordDisabled?: boolean;
+    /** The take will include sound (title only). Default true. */
+    withAudio?: boolean;
     /** Hide the record/play buttons (the phone bottom bar owns them). Default true. */
     showTransport?: boolean;
 }
@@ -72,6 +76,8 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     primaryExport,
     extraExports,
     busy = false,
+    recordDisabled = false,
+    withAudio = true,
     showTransport = true
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,9 +112,9 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                 {!isRecording ? (
                     <button
                         onClick={onRecord}
-                        disabled={isPlaying || busy}
+                        disabled={isPlaying || busy || recordDisabled}
                         className="w-11 h-11 rounded-full bg-white/5 hover:bg-[#EE3B2B]/20 border border-white/20 hover:border-[#EE3B2B] flex items-center justify-center group transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Start Recording (With Audio)"
+                        title={withAudio ? "Start Recording (With Audio)" : "Start Recording (Motion Only)"}
                     >
                         <Circle fill="#EE3B2B" className="text-[#EE3B2B] group-hover:scale-105 transition-transform" size={16} />
                     </button>

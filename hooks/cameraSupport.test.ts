@@ -13,15 +13,14 @@ describe('resolveFacing', () => {
 });
 
 describe('describeCameraError', () => {
-  it('explains a denied permission with the iPhone Settings path', () => {
+  it('says a denied permission is a block (the per-browser steps live on the structured issue)', () => {
     const m = describeCameraError({ name: 'NotAllowedError' });
-    expect(m).toMatch(/permission/i);
-    expect(m).toMatch(/Website Settings/);
+    expect(m).toMatch(/blocked/i);
   });
   it('separates no-camera, busy-camera and insecure-page failures', () => {
     expect(describeCameraError({ name: 'NotFoundError' })).toMatch(/no camera/i);
-    expect(describeCameraError({ name: 'NotReadableError' })).toMatch(/busy|in use|unavailable/i);
-    expect(describeCameraError(new TypeError('navigator.mediaDevices is undefined'))).toMatch(/https/i);
+    expect(describeCameraError({ name: 'NotReadableError' })).toMatch(/busy/i);
+    expect(describeCameraError(new TypeError('navigator.mediaDevices is undefined'))).toMatch(/cannot use the camera/i);
   });
   it('never throws on junk', () => {
     expect(describeCameraError(null)).toMatch(/camera/i);

@@ -1,0 +1,44 @@
+import { describe, it, expect } from 'vitest';
+import { resolveInitialMode, withDemoParam } from './appRoute';
+
+describe('resolveInitialMode', () => {
+  it('opens Face Puppet with no params (the default load)', () => {
+    expect(resolveInitialMode('')).toBe('face');
+    expect(resolveInitialMode('?')).toBe('face');
+  });
+  it('keeps ?debug from changing the demo', () => {
+    expect(resolveInitialMode('?debug')).toBe('face');
+  });
+  it('deep-links to each other demo', () => {
+    expect(resolveInitialMode('?demo=telemetry')).toBe('telemetry');
+    expect(resolveInitialMode('?demo=aircanvas')).toBe('aircanvas');
+    expect(resolveInitialMode('?demo=game')).toBe('game');
+    expect(resolveInitialMode('?demo=recorder')).toBe('recorder');
+    expect(resolveInitialMode('?debug&demo=telemetry')).toBe('telemetry');
+  });
+  it('opens the overview for ?demo=menu', () => {
+    expect(resolveInitialMode('?demo=menu')).toBe('home');
+    expect(resolveInitialMode('?demo=hub')).toBe('home');
+  });
+  it('falls back to Face Puppet for an unknown demo', () => {
+    expect(resolveInitialMode('?demo=nope')).toBe('face');
+    expect(resolveInitialMode('?demo=')).toBe('face');
+  });
+});
+
+describe('withDemoParam', () => {
+  it('drops the param for Face Puppet and keeps the others', () => {
+    expect(withDemoParam('?demo=telemetry&debug=', 'face')).toBe('?debug=');
+    expect(withDemoParam('?demo=telemetry', 'face')).toBe('');
+  });
+  it('sets the param for another demo and for the overview', () => {
+    expect(withDemoParam('', 'telemetry')).toBe('?demo=telemetry');
+    expect(withDemoParam('?debug', 'game')).toBe('?debug=&demo=game');
+    expect(withDemoParam('', 'home')).toBe('?demo=menu');
+  });
+  it('round-trips through resolveInitialMode', () => {
+    for (const m of ['face', 'game', 'aircanvas', 'telemetry', 'recorder', 'home'] as const) {
+      expect(resolveInitialMode(withDemoParam('?debug', m))).toBe(m);
+    }
+  });
+});

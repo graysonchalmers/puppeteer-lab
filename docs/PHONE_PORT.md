@@ -1,6 +1,7 @@
 # Phone port: scope and findings (2026-09-29)
 
 **Status: items 1 and 2 BUILT 2026-09-29 (layout, camera flip, CPU fallback, errors, ?debug readout); NOT yet verified on a real phone. Items 3 and 4 not built.**
+**Update 2026-09-30: Face Puppet is the default load, and the camera/microphone permission flow was redone (tap-to-start card, one combined camera+mic request, per-error cards, one-tap resume). Built and gated in Chromium (fake camera) and WebKit (no camera); NOT yet verified on a real phone. See "Permission flow (2026-09-30)" at the end. The audit text below is the original record; where it says Record asks for the microphone, or that errors only say "Could not access camera", that is no longer true for Face Puppet.**
 `NORTH_STAR.md` now says phones are supported for Face Puppet only; desktop Chrome with a webcam stays the primary target.
 The findings below are the original 2026-09-29 audit (pre-build), kept as the record of what was wrong.
 
@@ -178,10 +179,24 @@ handled. Only a construction failure falls back to CPU.
 - Pre-existing, desktop: the header display toggles overlap the sidebar title.
 - On a 320px-wide screen the display-toggles row overflows the drawer.
 - The export banner is narrow on phones (phone export is out of scope for this port).
-- Retry reloads both models even if only the camera failed.
+- ~~Retry reloads both models even if only the camera failed.~~ Fixed 2026-09-30: a camera-only failure reopens just the stream.
 - Flip is not possible after a tablet crosses 768px while on the rear camera (the PhoneBar disappears
   with the phone layout).
 - No `vh` fallback for `dvh` on very old browsers.
-- If the rear camera fails to open (e.g. `NotReadableError`), the Flip button is shown but disabled and
-  Retry re-requests the rear camera; a page reload is the way back to the front camera. (Parked, one-line
-  code fix: `flipDisabled={!isCameraReady && !error}`.)
+- ~~If the rear camera fails to open, Flip is disabled.~~ Fixed 2026-09-30: Flip is only locked while a camera request is in flight, so it is the way back to the other camera.
+
+
+## Permission flow (2026-09-30)
+
+What changed for Face Puppet (other demos still start the camera on load and ask for the microphone on Record):
+
+- **Default load.** `/` opens Face Puppet (no hub). `?demo=<face|game|aircanvas|telemetry|recorder>` deep-links, `?demo=menu` opens the old hub as an overview, `?debug` and other params are kept. A small "Demos" menu in Face Puppet's header switches demos; on a phone the other four are marked "Desktop recommended" (unverified on phones). The build stamp moved into that menu.
+- **Nothing is requested on load.** A start card says what is used (camera for tracking; microphone only for recording with sound) and that video and voice stay on the device. One tap on "Start camera" is the user gesture and sends one request: camera and, if the "Record with sound" box is ticked (default on), the microphone in the SAME request, so there is one prompt and no second `getUserMedia` while the camera is live. The camera request goes out before the models load so the prompt appears at once.
+- **Skip the card only when no prompt can appear.** `navigator.permissions.query` (guarded; throws or unsupported = unknown) for camera and microphone; the card is skipped only if the camera is granted and the microphone is granted or not wanted. Nothing is stored by the app.
+- **Record never asks.** The microphone track is kept aside by `useTracker` (muted until a take records, unmuted on Record, muted again on Stop, survives camera flips, stopped on unmount/idle pause). `useRecorder` borrows it and never stops it. With no microphone the take is motion only and the button title says so. A "Turn on" link (explicit tap, mic-only request) lets someone who unticked the box add sound later.
+- **Denied microphone never blocks.** If the combined request fails, `planAudioFallback` decides: missing/busy device or camera-already-granted -> silently retry video-only; camera undecided or unknowable (Safari) -> show the error with a "Continue without microphone" button (no automatic re-prompt); camera denied -> show the error.
+- **Errors.** See the matrix in the 2026-09-30 handoff-log entry. Blocked shows per-browser steps (iOS Safari aA > Website Settings, iOS Chrome/Edge via the Settings app, Android Chrome, desktop Chrome/Edge/Firefox/Safari). Insecure and unsupported are caught BEFORE asking.
+- **Interruptions.** `ended` on the camera track, or `mute` that lasts over 2.5 s (only after the first frame), moves the tracker to `lost`: a "Camera paused" card with one-tap "Resume camera". An `unmute` brings it back by itself. Checked again on `visibilitychange`, `pageshow` and `orientationchange`. A camera lost mid-take ends the take and keeps it.
+- **Re-entrancy.** Retry/resume are ignored while a request is in flight; superseded requests stop their own tracks; the stale error is cleared when a new attempt starts, not when it succeeds.
+
+Verified by `npm run phone-check` (97 checks): Chromium fake camera, stubbed `getUserMedia` rejections, live-track counts. **Playwright WebKit has no camera and, in this build, no `navigator.mediaDevices`**: WebKit sections prove layout, the start card and the error UI only. Everything about how iOS Safari/Chrome/Edge actually behave (prompt wording, whether a mute event fires when backgrounding, whether the mic indicator stays on, what `permissions.query` returns) is reasoned, not observed.

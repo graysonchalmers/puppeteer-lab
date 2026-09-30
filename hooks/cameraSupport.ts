@@ -5,6 +5,8 @@
  * Pure camera/tracker support used by useTracker: facing resolution, readable
  * camera errors, and the GPU->CPU landmarker fallback.
  */
+import { buildCameraIssue, classifyCameraError, issueSentence } from './cameraAccess';
+
 export type Facing = 'user' | 'environment';
 export type Delegate = 'GPU' | 'CPU';
 
@@ -14,25 +16,9 @@ export function resolveFacing(requested: Facing, reported: string | undefined): 
   return requested;
 }
 
-/** One human sentence per getUserMedia failure. */
+/** One human sentence per getUserMedia failure (title + message; steps live on the structured CameraIssue). */
 export function describeCameraError(err: unknown): string {
-  const name = (err as { name?: string } | null | undefined)?.name ?? '';
-  switch (name) {
-    case 'NotAllowedError':
-    case 'SecurityError':
-      return 'Camera permission was denied. Allow camera access for this site (on iPhone: the aA menu > Website Settings > Camera) and try again.';
-    case 'NotFoundError':
-    case 'OverconstrainedError':
-      return 'No camera was found on this device.';
-    case 'NotReadableError':
-    case 'AbortError':
-      return 'The camera is busy or unavailable. Close other apps that use it and try again.';
-    case 'TypeError':
-      // navigator.mediaDevices is undefined on non-https pages.
-      return 'This browser blocked camera access here. The camera only works on a secure (https) page.';
-    default:
-      return 'Could not start the camera.';
-  }
+  return issueSentence(buildCameraIssue(classifyCameraError(err)));
 }
 
 /** Try the GPU delegate, then the CPU one. If both fail the CPU error is what the caller sees. */

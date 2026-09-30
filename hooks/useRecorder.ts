@@ -80,7 +80,13 @@ export function findFrameIndex(frames: { timestamp: number }[], t: number): numb
 
 // Exported recordings carry landmarks smoothed at whatever the Global Smoothing
 // slider was set to during capture (RAW = unsmoothed).
-export const useRecorder = (type: TrackingType) => {
+/**
+ * `sharedAudio`: the camera hook's microphone stream (useTracker's audioStreamRef). When given, a take records from
+ * it and NEVER asks for the microphone itself (no prompt mid-take, no second getUserMedia while the camera is
+ * live); null/dead = the take is motion only. Its tracks are borrowed: Stop and unmount only mute them, never
+ * stop them. Without it (the other demos) the old behaviour stays: ask for the microphone when Record is pressed.
+ */
+export const useRecorder = (type: TrackingType, sharedAudio?: { readonly current: MediaStream | null }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -104,6 +110,10 @@ export const useRecorder = (type: TrackingType) => {
     // Audio recording & playback refs
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioStreamRef = useRef<MediaStream | null>(null);
+    const audioOwnedRef = useRef(true); // false = the stream is borrowed from the camera hook (never stop its tracks)
+    const sharedAudioRef = useRef(sharedAudio);
+    sharedAudioRef.current = sharedAudio;
+    const recordGenRef = useRef(0); // bumped on every start/stop so a late getUserMedia answer can tell it is stale
     const audioChunksRef = useRef<Blob[]>([]);
     const audioUrlRef = useRef<string | null>(null);
     const audioBase64Ref = useRef<string | null>(null);
@@ -122,12 +132,19 @@ export const useRecorder = (type: TrackingType) => {
         return b.length ? b[b.length - 1].timestamp : 0;
     };
 
+    /** Owned streams are stopped; a borrowed one (the camera hook's microphone) is only muted again. */
+    const releaseAudioStream = () => {
+        const stream = audioStreamRef.current;
+        audioStreamRef.current = null;
+        if (!stream) return;
+        if (audioOwnedRef.current) stream.getTracks().forEach(t => t.stop());
+        else stream.getAudioTracks().forEach(t => { t.enabled = false; });
+    };
+
     // Cleanup audio on unmount
     useEffect(() => {
         return () => {
-            if (audioStreamRef.current) {
-                audioStreamRef.current.getTracks().forEach(t => t.stop());
-            }
+            releaseAudioStream();
             if (audioElementRef.current) {
                 audioElementRef.current.pause();
                 audioElementRef.current = null;
@@ -166,60 +183,79 @@ export const useRecorder = (type: TrackingType) => {
             audioElementRef.current.pause();
         }
 
-        // Request audio stream from microphone
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const gen = ++recordGenRef.current;
+        releaseAudioStream();
+
+        const beginAudio = (stream: MediaStream, owned: boolean) => {
+            audioStreamRef.current = stream;
+            audioOwnedRef.current = owned;
+            if (!owned) stream.getAudioTracks().forEach(t => { t.enabled = true; }); // the camera hook keeps it muted between takes
+
+            let mimeType = 'audio/webm';
+            if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    mimeType = 'audio/webm;codecs=opus';
+                } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+                    mimeType = 'audio/ogg';
+                }
+            }
+
+            try {
+                const recorder = new MediaRecorder(stream, { mimeType });
+                mediaRecorderRef.current = recorder;
+
+                recorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) {
+                        audioChunksRef.current.push(e.data);
+                    }
+                };
+
+                recorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+                    if (audioBlob.size > 0) {
+                        const url = URL.createObjectURL(audioBlob);
+                        audioUrlRef.current = url;
+                        audioBlobRef.current = audioBlob;
+                        setHasAudio(true);
+
+                        // Convert to base64 for persistent JSON export
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            if (typeof reader.result === 'string') {
+                                audioBase64Ref.current = reader.result;
+                            }
+                        };
+                        reader.readAsDataURL(audioBlob);
+                    }
+                };
+
+                recorder.onstart = () => {
+                    audioStartOffsetMsRef.current = performance.now() - startTimeRef.current;
+                };
+
+                recorder.start(100);
+            } catch (err) {
+                console.warn("Could not start MediaRecorder for audio:", err);
+            }
+        };
+
+        const shared = sharedAudioRef.current;
+        if (shared) {
+            // Shared mode: use the microphone the camera hook already holds, or record motion only. Never ask.
+            const stream = shared.current;
+            if (stream && stream.getAudioTracks().some(t => t.readyState === 'live')) beginAudio(stream, false);
+        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            // Legacy (the other demos): request audio stream from microphone
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
-                    audioStreamRef.current = stream;
-                    
-                    let mimeType = 'audio/webm';
-                    if (typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function') {
-                        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                            mimeType = 'audio/webm;codecs=opus';
-                        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                            mimeType = 'audio/mp4';
-                        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-                            mimeType = 'audio/ogg';
-                        }
+                    if (gen !== recordGenRef.current) {
+                        // Stop (or another Record) came before the answer: this microphone is not wanted.
+                        stream.getTracks().forEach(t => t.stop());
+                        return;
                     }
-
-                    try {
-                        const recorder = new MediaRecorder(stream, { mimeType });
-                        mediaRecorderRef.current = recorder;
-
-                        recorder.ondataavailable = (e) => {
-                            if (e.data && e.data.size > 0) {
-                                audioChunksRef.current.push(e.data);
-                            }
-                        };
-
-                        recorder.onstop = () => {
-                            const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-                            if (audioBlob.size > 0) {
-                                const url = URL.createObjectURL(audioBlob);
-                                audioUrlRef.current = url;
-                                audioBlobRef.current = audioBlob;
-                                setHasAudio(true);
-
-                                // Convert to base64 for persistent JSON export
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                    if (typeof reader.result === 'string') {
-                                        audioBase64Ref.current = reader.result;
-                                    }
-                                };
-                                reader.readAsDataURL(audioBlob);
-                            }
-                        };
-
-                        recorder.onstart = () => {
-                            audioStartOffsetMsRef.current = performance.now() - startTimeRef.current;
-                        };
-
-                        recorder.start(100);
-                    } catch (err) {
-                        console.warn("Could not start MediaRecorder for audio:", err);
-                    }
+                    beginAudio(stream, true);
                 })
                 .catch(err => {
                     console.warn("Microphone not available or permission denied, recording motion only:", err);
@@ -228,6 +264,7 @@ export const useRecorder = (type: TrackingType) => {
     }, []);
 
     const stopRecording = useCallback(() => {
+        recordGenRef.current++;
         setIsRecording(false);
         setIsPaused(false);
         setFrameCount(bufferRef.current.length);
@@ -241,10 +278,7 @@ export const useRecorder = (type: TrackingType) => {
             }
         }
 
-        if (audioStreamRef.current) {
-            audioStreamRef.current.getTracks().forEach(track => track.stop());
-            audioStreamRef.current = null;
-        }
+        releaseAudioStream();
     }, []);
 
     const captureFrame = useCallback((data: Omit<FrameData, 'timestamp'>) => {

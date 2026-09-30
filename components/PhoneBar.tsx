@@ -16,6 +16,10 @@ interface PhoneBarProps {
   /** Export in progress or recording: locks everything but Stop. */
   busy: boolean;
   canFlip: boolean;
+  /** Record needs a live camera. */
+  recordDisabled?: boolean;
+  /** The take will include sound (title only). Default true. */
+  withAudio?: boolean;
   /** Extra flip lock, e.g. while the camera is still opening. */
   flipDisabled?: boolean;
   controlsOpen: boolean;
@@ -37,9 +41,9 @@ const PhoneBar: React.FC<PhoneBarProps> = (p) => (
     {!p.isRecording ? (
       <button
         aria-label="Record"
-        title="Start Recording (With Audio)"
+        title={p.withAudio === false ? 'Start Recording (Motion Only)' : 'Start Recording (With Audio)'}
         onClick={p.onRecord}
-        disabled={p.isPlaying || p.busy}
+        disabled={p.isPlaying || p.busy || p.recordDisabled}
         className={`${round} bg-white/5 border-white/20`}
       >
         <Circle fill="#EE3B2B" className="text-[#EE3B2B]" size={16} />
