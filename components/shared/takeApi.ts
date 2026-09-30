@@ -6,13 +6,14 @@
  * Same-origin `/api/*`; every function takes an optional fetch so tests never touch the network.
  */
 
-export type UploadErrorKind = 'disabled' | 'rate-limited' | 'too-large' | 'storage-full' | 'invalid' | 'network' | 'unknown';
+export type UploadErrorKind = 'disabled' | 'rate-limited' | 'too-large' | 'storage-full' | 'busy' | 'invalid' | 'network' | 'unknown';
 
 const MESSAGES: Record<UploadErrorKind, string> = {
   disabled: 'Saving a link is not available right now. Use Export to keep your take.',
   'rate-limited': 'You have saved a lot of takes today. Try again tomorrow, or use Export.',
   'too-large': 'This take is too big to upload. Use Export to keep it.',
   'storage-full': 'Saving links is paused for now. Use Export to keep your take.',
+  busy: 'The server is busy. Try again in a few seconds.',
   invalid: 'This take could not be uploaded. Use Export to keep it.',
   network: 'Could not reach the server. Check your connection and try again.',
   unknown: 'Could not save this take. Use Export to keep it.',
@@ -30,6 +31,7 @@ function kindForResponse(status: number, code: string | undefined): UploadErrorK
   if (status === 429) return 'rate-limited';
   if (status === 413) return 'too-large';
   if (code === 'storage-full') return 'storage-full';
+  if (code === 'busy') return 'busy';
   if (status === 400 || status === 415 || status === 422) return 'invalid';
   return 'unknown';
 }
@@ -51,6 +53,15 @@ export async function fetchUploadConfig(fetchFn: typeof fetch = fetch): Promise<
   } catch {
     return null;
   }
+}
+
+/**
+ * Checked before uploading: the server caps the DECOMPRESSED take at `maxBytes`, and the blob is the uncompressed JSON,
+ * so its size is exact. Null when it fits.
+ */
+export function oversizeMessage(size: number, maxBytes: number): string | null {
+  if (size <= maxBytes) return null;
+  return `This take is too long to upload (limit about ${Math.round(maxBytes / (1024 * 1024))} MB). Use Export to keep it.`;
 }
 
 async function gzipBlob(blob: Blob): Promise<Blob | null> {

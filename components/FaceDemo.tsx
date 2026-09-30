@@ -23,6 +23,7 @@ import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
 import SaveLink from './SaveLink';
+import { useSaveLink } from '../hooks/useSaveLink';
 import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
 import { MeshDetail } from './face/faceGeometry';
 import { Landmark } from './shared/trackerTypes';
@@ -89,6 +90,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
 
   // Recorder Hook
   const recorder = useRecorder('FACE', audioStreamRef); // takes use the mic the camera request already got: no prompt on Record
+
+  // Save & get link state lives here, not in SaveLink: rotating a phone remounts the recorder panel (drawer <-> desktop).
+  const saveLink = useSaveLink(() => recorder.buildRecordingBlob('full'), `${recorder.frameCount}:${recorder.durationMs}`);
 
   // The camera died mid-take (OS or another app): end the take cleanly and keep what was captured.
   const [takeCut, setTakeCut] = useState(false);
@@ -400,10 +404,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
     ],
     footer: (
       <SaveLink
-        getBlob={() => recorder.buildRecordingBlob('full')}
+        state={saveLink}
         disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
         hasAudio={recorder.hasAudio}
-        takeKey={`${recorder.frameCount}:${recorder.durationMs}`}
       />
     ),
   };

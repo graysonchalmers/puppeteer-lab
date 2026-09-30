@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { gunzipSync } from 'node:zlib';
-import { fetchTake, fetchUploadConfig, uploadTake, expiresLabel, UploadError } from './takeApi';
+import { fetchTake, fetchUploadConfig, uploadTake, expiresLabel, UploadError, oversizeMessage } from './takeApi';
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -26,6 +26,7 @@ describe('uploadTake', () => {
     [429, 'rate-limited', 'rate-limited'],
     [413, 'too-large', 'too-large'],
     [503, 'storage-full', 'storage-full'],
+    [503, 'busy', 'busy'],
     [422, 'invalid-take', 'invalid'],
     [500, 'internal', 'unknown'],
   ])('maps %s %s to %s', async (status, code, kind) => {
@@ -41,6 +42,24 @@ describe('uploadTake', () => {
     expect((await uploadTake(new Blob(['{}']), down).catch((e) => e)).kind).toBe('network');
     const html = (async () => new Response('<html>', { status: 502 })) as unknown as typeof fetch;
     expect((await uploadTake(new Blob(['{}']), html).catch((e) => e)).kind).toBe('unknown');
+  });
+});
+
+describe('busy', () => {
+  it('tells the user to retry in a few seconds', async () => {
+    const fetchFn = (async () => json(503, { error: 'busy' }, { 'Retry-After': '5' })) as unknown as typeof fetch;
+    const err = await uploadTake(new Blob(['{}']), fetchFn).catch((e) => e);
+    expect(err.message).toBe('The server is busy. Try again in a few seconds.');
+  });
+});
+
+describe('oversizeMessage', () => {
+  const MB = 1024 * 1024;
+  it('is null at or under the cap and names the rounded limit over it', () => {
+    expect(oversizeMessage(50 * MB, 50 * MB)).toBeNull();
+    expect(oversizeMessage(10, 50 * MB)).toBeNull();
+    expect(oversizeMessage(50 * MB + 1, 50 * MB)).toBe('This take is too long to upload (limit about 50 MB). Use Export to keep it.');
+    expect(oversizeMessage(2 * MB, 1.4 * MB)).toBe('This take is too long to upload (limit about 1 MB). Use Export to keep it.');
   });
 });
 

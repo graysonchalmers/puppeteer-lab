@@ -50,7 +50,7 @@ export const StartCard: React.FC<StartCardProps> = ({ micWanted, micBlocked, onM
       Start camera
     </button>
     <p className="text-[10px] text-gray-500 leading-snug">
-      Camera video and sound stay on this device unless you tap Save &amp; get link on a take.
+      Camera video stays on this device. Face and hand motion, and your voice if you record it, are only uploaded if you tap Save &amp; get link.
     </p>
   </div>
 );

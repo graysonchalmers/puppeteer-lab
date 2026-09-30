@@ -278,7 +278,7 @@ async function chromiumPhone(vp) {
     check(`${L}: default load lands in Face Puppet`, (await page.getByText('Demos').first().isVisible()) && (await page.getByText('Open Puppet').count()) === 0);
     check(`${L}: start card shows before any getUserMedia call`, (await startCard(page).isVisible()) && (await gumCount(page)) === 0, `calls=${await gumCount(page)}`);
     const cardText = await startCard(page).innerText();
-    check(`${L}: start card says what is used and that it stays on the device`, /camera/i.test(cardText) && /microphone/i.test(cardText) && /stay on this device/i.test(cardText));
+    check(`${L}: start card says what is used and that it stays on the device`, /camera/i.test(cardText) && /microphone/i.test(cardText) && /stays? on this device/i.test(cardText));
     check(`${L}: Record is disabled until the camera runs`, await page.getByRole('button', { name: 'Record', exact: true }).isDisabled());
     const cb = await bbox(startCard(page));
     const barTop = (await bbox(page.getByTestId('phone-bar')))?.y ?? 0;
