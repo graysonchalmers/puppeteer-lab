@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveInitialMode, withDemoParam } from './appRoute';
+import { resolveInitialMode, withDemoParam, resolveTakeId } from './appRoute';
 
 describe('resolveInitialMode', () => {
   it('opens Face Puppet with no params (the default load)', () => {
@@ -39,6 +39,19 @@ describe('withDemoParam', () => {
   it('round-trips through resolveInitialMode', () => {
     for (const m of ['face', 'game', 'aircanvas', 'telemetry', 'recorder', 'home'] as const) {
       expect(resolveInitialMode(withDemoParam('?debug', m))).toBe(m);
+    }
+  });
+});
+
+describe('resolveTakeId', () => {
+  const id = 'AbCdEfGhIjKlMnOpQrStUv';
+  it('reads a 22-char id from /t/<id>, with or without a trailing slash', () => {
+    expect(resolveTakeId(`/t/${id}`)).toBe(id);
+    expect(resolveTakeId(`/t/${id}/`)).toBe(id);
+  });
+  it('ignores everything else', () => {
+    for (const p of ['/', '/t', '/t/', '/t/short', `/t/${id}x`, `/x/t/${id}`, `/t/${id}/more`, '/t/../etc']) {
+      expect(resolveTakeId(p)).toBeNull();
     }
   });
 });

@@ -24,3 +24,9 @@ export function withDemoParam(search: string, mode: AppMode): string {
   const q = p.toString();
   return q ? `?${q}` : '';
 }
+
+/** The take id when the page is a share link (`/t/<22 chars>`), else null. */
+export function resolveTakeId(pathname: string): string | null {
+  const m = /^\/t\/([A-Za-z0-9_-]{22})\/?$/.exec(pathname);
+  return m ? m[1] : null;
+}
