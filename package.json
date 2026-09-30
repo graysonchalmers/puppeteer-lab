@@ -14,6 +14,7 @@
     "smoke": "npm run build && node scripts/smoke.mjs",
     "phone-check": "npm run build && node scripts/phone-check.mjs",
     "stamp": "node scripts/build-stamp.mjs --print",
+    "share-check": "npm run build && node scripts/share-check.mjs",
     "server": "node server/index.mjs"
   },
   "dependencies": {

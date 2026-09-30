@@ -1,0 +1,14 @@
+services:
+  mocap-api:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Loopback only: Caddy on the same box is the only client, and the rate limiter trusts X-Forwarded-For because of that.
+      - "127.0.0.1:3016:8787"
+    env_file:
+      - .env.local
+    environment:
+      - HOST=0.0.0.0
+      - DATA_DIR=/data
+    volumes:
+      - /home/grayson/mocap-data:/data

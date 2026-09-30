@@ -200,3 +200,7 @@ What changed for Face Puppet (other demos still start the camera on load and ask
 - **Re-entrancy.** Retry/resume are ignored while a request is in flight; superseded requests stop their own tracks; the stale error is cleared when a new attempt starts, not when it succeeds.
 
 Verified by `npm run phone-check` (97 checks): Chromium fake camera, stubbed `getUserMedia` rejections, live-track counts. **Playwright WebKit has no camera and, in this build, no `navigator.mediaDevices`**: WebKit sections prove layout, the start card and the error UI only. Everything about how iOS Safari/Chrome/Edge actually behave (prompt wording, whether a mute event fires when backgrounding, whether the mic indicator stays on, what `permissions.query` returns) is reasoned, not observed.
+
+## Save & get link (2026-09-30)
+
+On a phone, Face Puppet's Controls drawer has **Save & get link**: it uploads the take and returns a 24 h link, so nothing has to be saved on the phone (this replaces the need for item 3 for most people). See `docs/SHARE_LINKS.md`. The button is hidden when the site has no API. Untested on a real phone: the Copy button (clipboard permission on iOS) and the share sheet.

@@ -1,0 +1,5 @@
+*.test.mjs
+Dockerfile
+compose.yaml
+.env*
+data
