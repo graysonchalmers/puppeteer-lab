@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveInitialMode, withDemoParam, resolveTakeId } from './appRoute';
+import { resolveInitialMode, withDemoParam, resolveTakeId, isTakePath } from './appRoute';
 
 describe('resolveInitialMode', () => {
   it('opens Face Puppet with no params (the default load)', () => {
@@ -52,6 +52,19 @@ describe('resolveTakeId', () => {
   it('ignores everything else', () => {
     for (const p of ['/', '/t', '/t/', '/t/short', `/t/${id}x`, `/x/t/${id}`, `/t/${id}/more`, '/t/../etc']) {
       expect(resolveTakeId(p)).toBeNull();
+    }
+  });
+});
+
+describe('isTakePath', () => {
+  it('is true for anything under /t/, so a cut-off or mistyped link reaches the viewer (not Face Puppet)', () => {
+    for (const p of ['/t/AbCdEfGhIjKlMnOpQrStUv', '/t/short', '/t/', '/t/AbCdEfGhIjKlMnOpQrStUvx', '/t/a/b']) {
+      expect(isTakePath(p)).toBe(true);
+    }
+  });
+  it('is false elsewhere', () => {
+    for (const p of ['/', '/t', '/x/t/abc', '/tt/abc', '/index.html']) {
+      expect(isTakePath(p)).toBe(false);
     }
   });
 });

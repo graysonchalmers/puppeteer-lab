@@ -30,3 +30,8 @@ export function resolveTakeId(pathname: string): string | null {
   const m = /^\/t\/([A-Za-z0-9_-]{22})\/?$/.exec(pathname);
   return m ? m[1] : null;
 }
+
+/** True for any path under /t/ (the viewer owns it; a truncated or bad id shows its not-found state). */
+export function isTakePath(pathname: string): boolean {
+  return pathname.startsWith('/t/');
+}

@@ -150,7 +150,7 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
             onChange={(e) => seek(parseFloat(e.target.value))}
             className="flex-1 h-1.5 accent-[#EE3B2B]" aria-label="Scrub"
           />
-          <span className="tabular-nums shrink-0">{fmt(clockMs)} / {fmt(take.durationMs)}</span>
+          <span data-testid="take-clock" className="tabular-nums shrink-0">{fmt(clockMs)} / {fmt(take.durationMs)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <a
@@ -170,10 +170,12 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
   );
 };
 
-const TakeViewer: React.FC<{ id: string }> = ({ id }) => {
-  const [view, setView] = useState<View>({ kind: 'loading' });
+/** `id` is null for a path under /t/ that is not a valid id (cut off or mistyped): not found, without asking the server. */
+const TakeViewer: React.FC<{ id: string | null }> = ({ id }) => {
+  const [view, setView] = useState<View>(() => (id === null ? { kind: 'not-found' } : { kind: 'loading' }));
 
   useEffect(() => {
+    if (id === null) return;
     let alive = true;
     (async () => {
       const r = await fetchTake(id);
@@ -204,7 +206,7 @@ const TakeViewer: React.FC<{ id: string }> = ({ id }) => {
       {view.kind === 'expired' && <Message title="This link has expired" body="Links to a saved take work for 24 hours. Record a new one and save it again." />}
       {view.kind === 'not-found' && <Message title="We can't find that take" body="The link may be mistyped or cut off. Check that you copied all of it." />}
       {view.kind === 'error' && <Message title="Could not load this take" body="Something went wrong loading it. Check your connection and try again." retry />}
-      {view.kind === 'ready' && <Player id={id} take={view.take} />}
+      {view.kind === 'ready' && id !== null && <Player id={id} take={view.take} />}
     </Shell>
   );
 };

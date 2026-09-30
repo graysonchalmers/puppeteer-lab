@@ -36,5 +36,5 @@ tools/fixtures/
 .proof/
 
 
-# Takes pulled from the server (scripts/Pull-Takes.ps1)
-data/
+# Takes pulled from the server (scripts/Pull-Takes.ps1); root only (tools/data/ is tracked)
+/data/

@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AppMode } from './types';
-import { resolveInitialMode, resolveTakeId, withDemoParam } from './appRoute';
+import { isTakePath, resolveInitialMode, resolveTakeId, withDemoParam } from './appRoute';
 import IdleOverlay from './components/IdleOverlay';
 
 // Face Puppet is the default landing demo (no params); ?demo=<id> deep-links to another one and
@@ -55,12 +55,15 @@ const Lab: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const takeId = useMemo(() => resolveTakeId(window.location.pathname), []);
-  if (!takeId) return <Lab />;
+  const route = useMemo(() => {
+    const p = window.location.pathname;
+    return isTakePath(p) ? { id: resolveTakeId(p) } : null; // id null = a cut-off/garbled link: the viewer says not found
+  }, []);
+  if (!route) return <Lab />;
   return (
     <div className="w-full h-[100dvh] bg-[#090A0C] overflow-hidden text-[#EDEDED] font-sans">
       <Suspense fallback={<DemoFallback />}>
-        <TakeViewer id={takeId} />
+        <TakeViewer id={route.id} />
       </Suspense>
     </div>
   );
