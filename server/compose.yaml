@@ -2,13 +2,17 @@ services:
   mocap-api:
     build: .
     restart: unless-stopped
+    # Shared 2 GB box: an upload can briefly cost ~4x its size, so cap the container rather than starve its neighbours.
+    mem_limit: 512m
     ports:
       # Loopback only: Caddy on the same box is the only client, and the rate limiter trusts X-Forwarded-For because of that.
       - "127.0.0.1:3016:8787"
     env_file:
       - .env.local
     environment:
+      # Fixed here (environment beats env_file): PORT must match the port mapping above and DATA_DIR the volume below.
       - HOST=0.0.0.0
+      - PORT=8787
       - DATA_DIR=/data
     volumes:
       - /home/grayson/mocap-data:/data

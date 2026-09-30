@@ -11,6 +11,8 @@ export function loadConfig(env = process.env) {
     dataDir: env.DATA_DIR || './data',
     maxBytes: int(env.MAX_TAKE_BYTES, 50 * 1024 * 1024),
     maxPerIpPerDay: int(env.MAX_UPLOADS_PER_IP_DAY, 30),
+    // Uploads being read/parsed at once. Each can cost ~4x its size in memory, so this is the memory cap, not a rate limit.
+    maxConcurrentUploads: int(env.MAX_CONCURRENT_UPLOADS, 2),
     linkTtlMs: int(env.LINK_TTL_HOURS, 24) * 3600_000,
     quotaBytes: int(env.QUOTA_MB, 10240) * 1024 * 1024,
     adminToken: env.ADMIN_TOKEN || '',

@@ -63,7 +63,25 @@ export function createStore({ dataDir, linkTtlMs, now = Date.now }) {
     }
   }
 
+  /** The stored file as a stream (for responses) plus its size, or null. Opened before any header is sent, so a missing file is still a clean 404. */
+  async function openGz(id) {
+    if (!ID_RE.test(id)) return null;
+    let fh;
+    try {
+      fh = await fs.open(filePath(id), 'r');
+    } catch {
+      return null;
+    }
+    try {
+      const { size } = await fh.stat();
+      return { size, stream: fh.createReadStream() }; // autoClose: the handle closes when the stream ends or is destroyed
+    } catch {
+      await fh.close().catch(() => {});
+      return null;
+    }
+  }
+
   const isLive = (meta) => now() - meta.createdAt < linkTtlMs;
 
-  return { save, getMeta, readGz, list, usedBytes, isLive };
+  return { save, getMeta, readGz, openGz, list, usedBytes, isLive };
 }

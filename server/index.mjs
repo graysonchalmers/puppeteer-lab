@@ -12,6 +12,7 @@ server.listen(config.port, config.host, () => {
   console.log(`[mocap] listening on ${config.host}:${config.port}, data in ${config.dataDir}`);
   if (!config.contactEmail) console.warn('[mocap] CONTACT_EMAIL is unset: uploads are refused until it is set');
   if (!config.adminToken) console.warn('[mocap] ADMIN_TOKEN is unset: the admin endpoints are off');
+  if (!process.env.IP_SALT) console.warn('[mocap] IP_SALT is unset: IP hashes use a public default salt');
 });
 
 for (const sig of ['SIGTERM', 'SIGINT']) {

@@ -51,11 +51,22 @@ describe('store', () => {
     for (const bad of ['../../etc/passwd', 'short', 'a'.repeat(23), '..%2f..%2fx', '']) {
       expect(await store.getMeta(bad)).toBeNull();
       expect(await store.readGz(bad)).toBeNull();
+      expect(await store.openGz(bad)).toBeNull();
     }
   });
 
   it('returns null for a well-formed id that does not exist', async () => {
     expect(await store.getMeta('a'.repeat(22))).toBeNull();
     expect(await store.readGz('a'.repeat(22))).toBeNull();
+    expect(await store.openGz('a'.repeat(22))).toBeNull();
+  });
+
+  it('opens a stored file as a stream with its size', async () => {
+    const meta = await store.save(Buffer.from('{"a":1}'), summary, 'x');
+    const opened = await store.openGz(meta.id);
+    expect(opened.size).toBe(meta.storedBytes);
+    const chunks = [];
+    for await (const c of opened.stream) chunks.push(c);
+    expect(gunzipSync(Buffer.concat(chunks)).toString()).toBe('{"a":1}');
   });
 });
