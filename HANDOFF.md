@@ -1,46 +1,33 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-29 (CT)_
+_Last updated: 2026-09-30 (CT)_
 
 ## 🎯 Current state
-Face Puppet now has a **phone layout and a front/rear camera**, deployed to [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com) (stamp `🌴 LATIN · 9a7593 · 2026-09-29`). The code is merged to `main` (fast-forward, 2026-09-29; the deployed build `9a7593c` is in `main`'s history; later commits are docs only). The branch `claude/puppeteer-lab-mobile-ecc9b4` can be retired.
-
-What's in it (Face Puppet only; the other 4 demos are unverified on phones):
-- **Layout (< 768px):** full-screen stage, fixed bottom bar (Record / Play / Flip camera / Controls), slide-up Controls drawer (sliders, display toggles, recorder file ops). A 48px strip under the bar is reserved for the deploy-time attribution badge, which otherwise covers the Controls button. Desktop (>= 768px) is unchanged except the PiP is now aspect-true (192x144).
-- **Camera:** `useTracker` takes `facing`; flipping reopens only the stream. GPU delegate falls back to CPU (visible "Compatibility mode" notice). Camera errors are readable, with a Retry button in Face Puppet. Explicit `video.play()`. The stream is now released on unmount.
-- **Rear camera design (important):** tracked frames and recordings stay **RAW** for both cameras (MediaPipe sees the same geometry front and rear). Only the live puppet view and the PiP follow the viewfinder on the rear camera (`viewFrame` in `components/shared/mirrorFrame.ts`). Do not mirror data in the tracker; a final review caught exactly that bug.
-- **`?debug`** in the URL shows one line: render fps | track fps | delegate | camera size | front/rear | dpr.
-- **Gate:** `npm run phone-check` (Playwright: Chromium touch + WebKit at 390x844, desktop 1440x900, stand-in deploy badge). 26/26 pass. Also typecheck clean, 204 tests, smoke OK.
+- **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com), stamp `🌴 LATIN · 9a7593 · 2026-09-29`, `main`): Face Puppet phone layout + front/rear camera + CPU fallback (2026-09-29). Opens on the demo hub. Grayson's first iPhone run: "mostly works"; the camera/microphone permission "seemed a little buggy".
+- **Built, gated, NOT merged, NOT deployed** (branch `claude/default-permissions`, worktree `.claude/worktrees/default-permissions`):
+  1. **Face Puppet is the default load** (desktop and phone). `?demo=<face|game|aircanvas|telemetry|recorder>` deep-links, `?demo=menu` is the old hub as an overview, `?debug` unchanged. A small "Demos" menu in Face Puppet's header switches demos (phone marks the other four "Desktop recommended"); the build stamp lives in that menu.
+  2. **Permission flow rebuilt** (details: `docs/PHONE_PORT.md` last section, `handoff-log/2026-09-30-default-load-permission-flow.md`): nothing is requested on load; a start card explains and one tap sends ONE request for camera + (ticked by default) microphone; Record never asks again; per-error cards with the right next step; "Camera paused" one-tap resume; retry/resume/flip never stack streams. `hooks/cameraAccess.ts` holds the pure logic (33 tests).
+- **Gate:** typecheck clean, 245 tests, smoke OK, `npm run phone-check` 97/97 (Chromium fake camera + stubbed rejections, WebKit layout/errors only, desktop). Proof: `.proof/2026-09-30-default-permissions/` (gitignored).
 
 ## 📌 Where we stopped
-Everything is built, reviewed, merged to `main` and deployed. **Nothing has been tested on a real phone.** Camera start, the GPU delegate on iOS, memory with several WebGL contexts, rear camera facing reports, WebKit finger scrolling and slider drags are all unverified.
+The branch is committed in its worktree only (not pushed). **Nothing has run on a real phone.** WebKit under Playwright has no camera and no `navigator.mediaDevices`, so iOS behaviour is reasoned (list in the handoff-log entry): prompt wording, whether a combined camera+mic request is one prompt, `mute`/`ended` on backgrounding, Settings paths, what `permissions.query` returns on Safari, the OS mic indicator.
 
 ## ▶️ Plan: what's next (in order)
-Grayson's first iPhone run (2026-09-29): "mostly works". What didn't work is not yet recorded.
-
-0. **Triage the "mostly" (5 min, Grayson).** Send the `?debug` line (render fps | track fps | GPU/CPU | size | front/rear), face only and with hands in view, plus which `docs/PHONE_PORT.md` checklist items failed (export popover clipped? rear camera? sliders? pause after 60 s?). Everything below is ordered assuming nothing big broke; a real failure jumps the queue.
-1. ~~CI green on `main`.~~ **Done 2026-09-29:** the `recordingSchema` perf test now uses the median of 7 runs (`9513073`), and CI on `main` is green.
-2. **Phone polish bundle (one small change, about an hour).** Flip stays enabled after a failed camera open (`flipDisabled={!isCameraReady && !error}`), `inert` on the closed drawer, decide whether a visible face counts as activity for idle pause, remove dead `activeFacingRef` in `useTracker`, add a short-viewport (390x667) case to `phone-check`, fix whatever step 0 found.
-3. **Phone defaults from real numbers.** If track fps is low, default hands off and/or LOW mesh on phones (`isPhone`), else leave. Decide from step 0's numbers, not before.
-4. **Phone recording export (PHONE_PORT item 3)**, the biggest remaining lever: create/resume the AudioContext inside the tap, `navigator.share({files})` fallback and a visible Save button, wake lock during export, warn about screen lock. Only useful once phone recording itself is trusted (checklist step 4).
-5. **Self-host Tailwind (PHONE_PORT item 4).** `index.html` loads it from a CDN at runtime; North Star says offline by default. Independent of phones.
-6. **Owed from before:** the 2026-09-22 on-camera Three.js tuning (LOW/FULL, boost defaults), then video preprocessing (dim rooms).
-7. **Later:** the other four demos on phones; update the Web-GC portfolio card only after phones are verified (until then it stays "desktop webcam").
+1. **Grayson decides two things** (bottom of the handoff-log entry): mic ticked by default in the first prompt or not; whether the other four demos also get a tap-to-start (deep links to them currently prompt immediately).
+2. **Merge to `main`, deploy** via the project's deploy path, then re-run the checklist on the iPhone: start card appears, one prompt, Record does not prompt, deny once then follow the blocked steps, background the app for 10 s and return (expect either nothing or the "Camera paused" card), `?debug` numbers (still owed from 2026-09-29).
+3. Phone polish bundle (remaining): `inert` on the closed drawer, decide whether a visible face counts as activity for idle pause, 390x667 short-viewport case in `phone-check`, phone defaults from real fps.
+4. Phone recording export (PHONE_PORT item 3), self-host Tailwind (item 4), the older owed items (Three.js tuning, video preprocessing), the other four demos on phones. Update the Web-GC card only after phones are verified.
 
 ## ❓ Open questions
-- Should a visible face count as activity for the idle auto-pause? On a phone with no touches it pauses after 60 s (hands already count).
-- Hands-off / LOW-mesh defaults on phones: decide after real numbers.
-- Flip button is disabled after a failed camera open (Retry re-requests the same camera; reload returns to front). One-line fix: `flipDisabled={!isCameraReady && !error}`.
-- Carried over from 2026-09-22: mesh LOW/FULL choice, eyeball poke-through at strong turns, in-app playback voice offset, Video preprocessing (split out), and the older items listed in `handoff-log/`.
+- Mic default in the first prompt (see above); gating the other demos.
+- Idle auto-pause and a visible face; hands-off / LOW-mesh phone defaults (need real numbers).
+- Carried over from 2026-09-22: mesh LOW/FULL, poke-through at strong turns, playback voice offset.
 
-## 🗂️ Changed this session
-- Merged to `main` (was branch `claude/puppeteer-lab-mobile-ecc9b4`), 16 commits from `9bf3e49`. Key files: `hooks/useTracker.ts`, `hooks/cameraSupport.ts`, `hooks/useIsPhone.ts`, `components/PhoneBar.tsx`, `components/DebugReadout.tsx`, `components/FaceDemo.tsx`, `components/RecorderControls.tsx`, `components/shared/mirrorFrame.ts`, `components/shared/fpsMeter.ts`, `components/face/pipSize.ts`, `scripts/phone-check.mjs`, `index.css`, `App.tsx`. Plan: `docs/superpowers/plans/2026-09-29-phone-port-layout-camera.md`. NORTH_STAR non-goal narrowed to "Face Puppet on phones".
-- Decisions (+ why):
-  - **Data stays raw for both cameras.** Same geometry front and rear; mirroring data would record a subject's anatomy backwards.
-  - **Reserve a 48px strip for the deploy badge.** The badge is injected at deploy time (fixed bottom-right, z 9999), so no local gate sees it; the gate injects a stand-in of the same size.
-  - **Measure before changing phone defaults.** Hence `?debug` and the CPU fallback notice.
-  - **Touch-scroll gate uses real touch events** (`Input.dispatchTouchEvent`); synthesized scroll gestures don't scroll in this environment.
-- Known flaky test: `recordingSchema.test.ts` "under 100ms" wall-clock perf budget (100-111 ms under load; passes alone). Fixed (median of 7 runs).
+## 🗂️ Changed this session (2026-09-30)
+- New: `hooks/cameraAccess.ts` (+test), `appRoute.ts` (+test), `components/CameraPanels.tsx`, `components/DemoSwitcher.tsx`, `handoff-log/2026-09-30-default-load-permission-flow.md`.
+- Edited: `hooks/useTracker.ts` (gated start, camera-before-models, mic kept aside, track watching, structured issues), `hooks/useRecorder.ts` (shared mic, stale-request guard), `hooks/cameraSupport.ts`, `components/FaceDemo.tsx`, `DemoHub.tsx`, `PhoneBar.tsx`, `RecorderControls.tsx`, `App.tsx`, `scripts/phone-check.mjs`, `docs/PHONE_PORT.md`.
+- Decisions (+ why): mic asked with the camera because voice is first-class (NORTH_STAR test b, "Puppet + your voice"); mic track held muted so Stop/flip never re-ask and iOS never sees an audio request while the camera runs; never auto re-prompt when the fault is ambiguous (button instead); "video and voice stay on this device" not "nothing leaves" (Tailwind CDN + deploy badge exist).
+- Traps: Playwright WebKit has no `mediaDevices` (gate installs a stand-in only for the stubbed section); the permissions-granted Chromium context skips the start card by design, so the explainer tests use an un-granted context (`--use-fake-ui-for-media-stream` still auto-accepts the tap); `tools/fixtures/` is gitignored, regenerate with `node tools/make-synthetic-take.mjs --hands`.
 
 ---
 📜 Full session history: `handoff-log/` (one dated file per session, oldest to newest)
