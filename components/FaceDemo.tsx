@@ -22,6 +22,7 @@ import { frameToCapture } from './face/captureFrame';
 import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder } from '../hooks/useRecorder';
 import RecorderControls from './RecorderControls';
+import SaveLink from './SaveLink';
 import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
 import { MeshDetail } from './face/faceGeometry';
 import { Landmark } from './shared/trackerTypes';
@@ -397,6 +398,14 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
       { id: 'video', label: 'Video', hint: 'Puppet + your voice, as it plays', onSelect: () => runExport('video') },
       { id: 'pack', label: 'Pack (.zip)', hint: 'Video + recording.json + audio', onSelect: () => runExport('pack') },
     ],
+    footer: (
+      <SaveLink
+        getBlob={() => recorder.buildRecordingBlob('full')}
+        disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
+        hasAudio={recorder.hasAudio}
+        takeKey={`${recorder.frameCount}:${recorder.durationMs}`}
+      />
+    ),
   };
 
   return (

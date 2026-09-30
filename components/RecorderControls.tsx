@@ -37,6 +37,8 @@ interface RecorderControlsProps {
     withAudio?: boolean;
     /** Hide the record/play buttons (the phone bottom bar owns them). Default true. */
     showTransport?: boolean;
+    /** Extra content at the bottom of the panel (Face Puppet's Save & get link). */
+    footer?: React.ReactNode;
 }
 
 const fmt = (ms: number) => {
@@ -78,7 +80,8 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
     busy = false,
     recordDisabled = false,
     withAudio = true,
-    showTransport = true
+    showTransport = true,
+    footer
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showExportMenu, setShowExportMenu] = useState(false);
@@ -270,6 +273,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
                     </div>
                 )}
             </div>
+            {footer}
         </div>
     );
 };

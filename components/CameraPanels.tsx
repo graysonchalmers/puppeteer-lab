@@ -49,7 +49,9 @@ export const StartCard: React.FC<StartCardProps> = ({ micWanted, micBlocked, onM
     <button type="button" onClick={onStart} className={primaryBtn}>
       Start camera
     </button>
-    <p className="text-[10px] text-gray-500 leading-snug">Your video and voice stay on this device.</p>
+    <p className="text-[10px] text-gray-500 leading-snug">
+      Camera video and sound stay on this device unless you tap Save &amp; get link on a take.
+    </p>
   </div>
 );
 

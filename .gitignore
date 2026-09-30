@@ -34,3 +34,7 @@ tools/fixtures/
 
 # Playwright proof captures (scripts/phone-check.mjs)
 .proof/
+
+
+# Takes pulled from the server (scripts/Pull-Takes.ps1)
+data/
