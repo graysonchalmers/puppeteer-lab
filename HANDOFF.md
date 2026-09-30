@@ -3,31 +3,36 @@
 _Last updated: 2026-09-30 (CT)_
 
 ## 🎯 Current state
-- **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com), stamp `🌴 LATIN · 9a7593 · 2026-09-29`, `main`): Face Puppet phone layout + front/rear camera + CPU fallback (2026-09-29). Opens on the demo hub. Grayson's first iPhone run: "mostly works"; the camera/microphone permission "seemed a little buggy".
-- **Built, gated, NOT merged, NOT deployed** (branch `claude/default-permissions`, worktree `.claude/worktrees/default-permissions`):
-  1. **Face Puppet is the default load** (desktop and phone). `?demo=<face|game|aircanvas|telemetry|recorder>` deep-links, `?demo=menu` is the old hub as an overview, `?debug` unchanged. A small "Demos" menu in Face Puppet's header switches demos (phone marks the other four "Desktop recommended"); the build stamp lives in that menu.
-  2. **Permission flow rebuilt** (details: `docs/PHONE_PORT.md` last section, `handoff-log/2026-09-30-default-load-permission-flow.md`): nothing is requested on load; a start card explains and one tap sends ONE request for camera + (ticked by default) microphone; Record never asks again; per-error cards with the right next step; "Camera paused" one-tap resume; retry/resume/flip never stack streams. `hooks/cameraAccess.ts` holds the pure logic (33 tests).
-- **Gate:** typecheck clean, 245 tests, smoke OK, `npm run phone-check` 97/97 (Chromium fake camera + stubbed rejections, WebKit layout/errors only, desktop). Proof: `.proof/2026-09-30-default-permissions/` (gitignored).
+- **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com)): `main@c089f16`, Face Puppet as the default load with the tap-to-start camera+mic permission flow (deployed 2026-09-30). Static site only, no API.
+- **Merged to `main`, NOT deployed: share links v1** (spec `docs/superpowers/specs/2026-09-30-share-links-design.md`, plan `docs/superpowers/plans/2026-09-30-share-links.md`, ops doc `docs/SHARE_LINKS.md`).
+  - Face Puppet gets **Save & get link**: an explicit tap uploads the take (v3 recording JSON: face/hand motion + optional voice) to a small Node 22 server (`server/`, zero npm deps) and returns `/t/<id>`. The link page (`components/TakeViewer.tsx`) plays the take back, offers a JSON download, and shows the 24 h expiry. After 24 h the link says "expired"; the file stays in a private archive forever (never deleted by the app).
+  - Caps: 50 MB per take (decompressed), 30 uploads per IP per day, ONE concurrent upload (`MAX_CONCURRENT_UPLOADS`, 503 `busy`), schema validation, storage quota, `mem_limit: 512m`. Uploads are refused (503) until `CONTACT_EMAIL` is set on the server, so the feature cannot go live without a real removal address.
+  - Pull to this PC: `scripts/Pull-Takes.ps1` (admin token in `MOCAP_ADMIN_TOKEN`) into `data/takes/` (gitignored).
+  - The button hides itself when there is no API, so the merged client is harmless on the current static site.
+- **Gates at the last full run:** typecheck clean, 321+ tests, smoke OK, `npm run phone-check` 97/97 (flaky under low RAM: fixed-wait drawer/mic checks; passes on re-run), `npm run share-check` 28/28 (real server + vite preview, Chromium desktop flow, WebKit iPhone Save + rotation, pull script). Docker was not installed where this was built: **the image has never been built.**
 
 ## 📌 Where we stopped
-The branch is committed in its worktree only (not pushed). **Nothing has run on a real phone.** WebKit under Playwright has no camera and no `navigator.mediaDevices`, so iOS behaviour is reasoned (list in the handoff-log entry): prompt wording, whether a combined camera+mic request is one prompt, `mute`/`ended` on backgrounding, Settings paths, what `permissions.query` returns on Safari, the OS mic indicator.
+Merged and pushed; **Task 7 (deploy to apps-01) is deliberately not done**. It needs Grayson: the `CONTACT_EMAIL` decision, him pasting `ADMIN_TOKEN` / `IP_SALT` / `CONTACT_EMAIL` into `.env.local` on the box, and a Caddy change on the shared server. A static-only redeploy was skipped on purpose: the new start-card copy mentions Save & get link, which would not exist on the live site. **Nothing has run on a real phone** (WebKit under Playwright only).
 
-## ▶️ Plan: what's next (in order)
-1. **Grayson decides two things** (bottom of the handoff-log entry): mic ticked by default in the first prompt or not; whether the other four demos also get a tap-to-start (deep links to them currently prompt immediately).
-2. **Merge to `main`, deploy** via the project's deploy path, then re-run the checklist on the iPhone: start card appears, one prompt, Record does not prompt, deny once then follow the blocked steps, background the app for 10 s and return (expect either nothing or the "Camera paused" card), `?debug` numbers (still owed from 2026-09-29).
-3. Phone polish bundle (remaining): `inert` on the closed drawer, decide whether a visible face counts as activity for idle pause, 390x667 short-viewport case in `phone-check`, phone defaults from real fps.
-4. Phone recording export (PHONE_PORT item 3), self-host Tailwind (item 4), the older owed items (Three.js tuning, video preprocessing), the other four demos on phones. Update the Web-GC card only after phones are verified.
+## ▶️ Next concrete step
+1. **Deploy share links (plan Task 7, checklist in `docs/SHARE_LINKS.md`)** with Grayson present: pick `CONTACT_EMAIL`; `mkdir` + `chown 1000:1000 /home/grayson/mocap-data`; tar-over-ssh `server/` to `/home/grayson/apps/mocap-api`; `docker compose up -d --build` (first ever build); Caddy `handle /api/*` (not `handle_path`) + SPA fallback for `/t/*`; redeploy the static site; measure one max-size upload with `docker stats`; then run `Pull-Takes.ps1` once. Offer, do not create, a nightly scheduled task for the pull.
+2. Alternative: **real-iPhone run** first (start card, one prompt, Record without a prompt, backgrounding, plus Save & get link, Copy, Share sheet, `?debug` numbers still owed from 2026-09-29).
+3. Alternative: **Phase 2 email** (Resend, link only, fixed template, per-IP and per-address limits). Needs an account, verified sender DNS and an API key; plan it after v1 is live.
 
 ## ❓ Open questions
-- Mic default in the first prompt (see above); gating the other demos.
-- Idle auto-pause and a visible face; hands-off / LOW-mesh phone defaults (need real numbers).
-- Carried over from 2026-09-22: mesh LOW/FULL, poke-through at strong turns, playback voice offset.
+- **`CONTACT_EMAIL`** (public removal address): undecided.
+- **Is about 2 minutes enough?** The 50 MB cap is roughly at most 150 s of a Face Puppet take (real frames carry about 52 blendshapes plus hands, so the true ceiling is shorter). The client refuses oversize takes with a plain message before uploading. Raise the cap or thin the frames if it bites.
+- Nightly pull: register the scheduled task, or pull by hand?
+- Real-phone unknowns: iOS Safari decoding an `audio/webm;codecs=opus` take in the viewer, clipboard permission, iOS `audio.currentTime` before metadata, camera/mic behaviour on backgrounding (carried over).
+- Phone polish bundle (carried over): `inert` on the closed drawer, visible face counting as activity for idle pause, 390x667 short-viewport case, phone defaults from real fps. Also from 2026-09-22: mesh LOW/FULL, poke-through at strong turns, playback voice offset.
 
 ## 🗂️ Changed this session (2026-09-30)
-- New: `hooks/cameraAccess.ts` (+test), `appRoute.ts` (+test), `components/CameraPanels.tsx`, `components/DemoSwitcher.tsx`, `handoff-log/2026-09-30-default-load-permission-flow.md`.
-- Edited: `hooks/useTracker.ts` (gated start, camera-before-models, mic kept aside, track watching, structured issues), `hooks/useRecorder.ts` (shared mic, stale-request guard), `hooks/cameraSupport.ts`, `components/FaceDemo.tsx`, `DemoHub.tsx`, `PhoneBar.tsx`, `RecorderControls.tsx`, `App.tsx`, `scripts/phone-check.mjs`, `docs/PHONE_PORT.md`.
-- Decisions (+ why): mic asked with the camera because voice is first-class (NORTH_STAR test b, "Puppet + your voice"); mic track held muted so Stop/flip never re-ask and iOS never sees an audio request while the camera runs; never auto re-prompt when the fault is ambiguous (button instead); "video and voice stay on this device" not "nothing leaves" (Tailwind CDN + deploy badge exist).
-- Traps: Playwright WebKit has no `mediaDevices` (gate installs a stand-in only for the stubbed section); the permissions-granted Chromium context skips the start card by design, so the explainer tests use an un-granted context (`--use-fake-ui-for-media-stream` still auto-accepts the tap); `tools/fixtures/` is gitignored, regenerate with `node tools/make-synthetic-take.mjs --hands`.
+- Branch `claude/animation-recording-server-storage-1562d2`, fast-forwarded into `main`.
+- New: `server/` (config, validate, rateLimit, store, app, index, Dockerfile, compose, tests), `components/SaveLink.tsx`, `hooks/useSaveLink.ts`, `components/TakeViewer.tsx`, `components/shared/takeApi.ts`, `takeShape.ts` (+tests), `scripts/share-check.mjs`, `scripts/Pull-Takes.ps1`, `docs/SHARE_LINKS.md`.
+- Edited: `App.tsx` (routes `/t/*` to the viewer), `appRoute.ts`, `RecorderControls.tsx` (`footer` slot), `FaceDemo.tsx`, `CameraPanels.tsx` (start-card copy), `vite.config.ts` (`/api` proxy for dev and preview), `vitest.config.ts`, `scripts/phone-check.mjs` (regex `/stays? on this device/i`), `.gitignore`.
+- Decisions (+ why): upload only on an explicit tap with a disclosure line (face+voice retained forever needs visible opt-in); one file, two access paths (private archive + 24 h public link); email is phase 2 and link-only (audio makes attachments huge, spam-relay risk); same-origin container behind Caddy (no CORS, same pattern as the other Docker apps); default 1 concurrent upload because a 50 MB take costs about 200 MB of heap and the shared box is 2 GB; SaveLink state lives in `useSaveLink` in FaceDemo so a phone rotation (which remounts the controls) cannot lose or duplicate an upload; `CONTACT_EMAIL` gates uploads server-side.
+- Traps: `phone-check` and the machine RAM (kill stray node/vite, run the stale-only reaper); `share-check` binds 8791/4174 and refuses busy ports; the client IP comes from `X-Forwarded-For` (trusted only behind loopback + Caddy); the rate limiter is in memory (restart resets it).
+- Deferred minors (not blocking): IPv6 /64 bucketing (no AAAA today), rate-limit slot burned by failed attempts, Download re-fetches the take, viewer keeps base64 audio in state and ignores devicePixelRatio, aria polish, dev proxy log noise.
 
 ---
 📜 Full session history: `handoff-log/` (one dated file per session, oldest to newest)
