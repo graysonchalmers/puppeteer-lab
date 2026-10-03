@@ -17,7 +17,7 @@ Cleanup + orbit built, reviewed, pushed and deployed; live check passed 8/8 with
 ## ▶️ Next concrete step
 1. **Real-iPhone pass on the live site** (start card, one prompt, import or record a take, Clean up, Orbit with touch). It is the biggest open check for the new work and also covers the carried-over phone unknowns.
 2. Alternative: **pick `CONTACT_EMAIL` and switch uploads on** (set it in `/home/grayson/apps/mocap-api/.env.local` on the box, then `cd /home/grayson/apps/mocap-api; sudo docker compose up -d --force-recreate`), then one live end-to-end save, phone open, `docker stats` during a big one, and one `Pull-Takes.ps1`. After that real links exist to open Clean up / Orbit on.
-3. Alternative: **clean the deferred items** (list below), best first: recompute-on-Stop stall, `trackHands` free-slot rule.
+3. Alternative: **clean the deferred items** (list below), best first: the `trackHands` free-slot rule. (Fixed locally 2026-10-03, not yet pushed/deployed: Clean up now computes only while a take plays, so the remembered pref no longer stalls every Stop; `facedemo-check` 27/27 pins it.)
 
 Roadmap with reasoning for the share-link work: `docs/SHARE_LINKS_ROADMAP.md`.
 
@@ -25,7 +25,7 @@ Roadmap with reasoning for the share-link work: `docs/SHARE_LINKS_ROADMAP.md`.
 - **`CONTACT_EMAIL`** (public removal address): undecided.
 - Is about 2 minutes enough for a take? (50 MB cap is roughly <= 150 s of Face Puppet; cleanup itself stops at 100 s.)
 - Nightly pull: scheduled task or by hand? (`MOCAP_ADMIN_TOKEN` is not set on the PC.)
-- Deferred from the cleanup/orbit final review (full list in `handoff-log/2026-10-03-take-cleanup-and-orbit.md`): `trackHands` lacks the spec's free-slot rule for a lone hand; hands always draw over the face in orbit and can pass behind the camera at zoom 0.5; cleanup recomputes after every recording Stop when the remembered pref is ON (consider computing only while playing); smoother segment tails keep a few px of lag; pointer hook gaps (`setPointerCapture` try/catch, 3-pointer pinch, right-click drag); the orbit gates use a mouse, not touch.
+- Deferred from the cleanup/orbit final review (full list in `handoff-log/2026-10-03-take-cleanup-and-orbit.md`): `trackHands` lacks the spec's free-slot rule for a lone hand; hands always draw over the face in orbit and can pass behind the camera at zoom 0.5; smoother segment tails keep a few px of lag; pointer hook gaps (`setPointerCapture` try/catch, 3-pointer pinch, right-click drag); the orbit gates use a mouse, not touch.
 - Carried over: iOS Safari decoding `audio/webm;codecs=opus` in the viewer, clipboard permission, camera/mic on backgrounding, phone polish bundle (`inert` closed drawer, 390x667 short viewport, phone defaults from real fps), mesh LOW/FULL, poke-through at strong turns, playback voice offset.
 
 ## 🗂️ Changed this session (2026-10-02 to 2026-10-03)

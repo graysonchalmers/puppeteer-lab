@@ -185,8 +185,13 @@ try {
 
   await page.getByTitle('Stop playback, back to live').click();
   await page.waitForTimeout(500);
+  // Clean up is only computed while a take plays: after Stop (switch still ON) there is no report, so no badge text.
+  check('after Stop the switch is still on but the cleanup is not computed (empty badge)',
+    (await attr(page, 'cleanup-toggle', 'aria-checked')) === 'true' && (await page.getByTestId('cleanup-badge').innerText()).trim() === '');
   await page.getByTestId('play-toggle').click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(600);
+  const replayBadge = await page.getByTestId('cleanup-badge').innerText();
+  check('Play computes it again and the badge reports the gap', /filled 1 gap/i.test(replayBadge) && /1 too long to fill/i.test(replayBadge), replayBadge);
   await pauseAt(page, T_GAP);
   await snap(page, 'after-stop', STAGE);
   await page.screenshot({ path: path.join(OUT, '05-after-stop-replay.png') });
@@ -209,6 +214,22 @@ try {
   // Calibration: the overlays are a few dozen one-pixel-radius dots and short rays, so they move only ~0.07% of the stage
   // (measured 0.07%); anything above 0.03% proves they were drawn, and the orbited check above must stay under 0.01%.
   check('...and are drawn in the front view (control)', overlayFront > 0.0003, pct(overlayFront));
+
+  // 5. The remembered pref is ON now (the switch was left on above and persisted). Reload, import a take: nothing
+  // plays, so the cleanup must not run (no badge text); Play computes it; Stop drops it again.
+  await page.reload();
+  await page.getByTestId('cleanup-toggle').waitFor({ timeout: 20000 });
+  await page.setInputFiles('input[type=file]', FIXTURE_FILE);
+  await page.waitForFunction(() => !document.querySelector('[data-testid=cleanup-toggle]').disabled, null, { timeout: 15000 });
+  check('the remembered pref is ON after a reload', (await attr(page, 'cleanup-toggle', 'aria-checked')) === 'true');
+  check('importing a take with the pref ON does not run the cleanup (empty badge until Play)', (await page.getByTestId('cleanup-badge').innerText()).trim() === '');
+  await page.getByTestId('play-toggle').click();
+  await page.waitForTimeout(600);
+  const rememberedBadge = await page.getByTestId('cleanup-badge').innerText();
+  check('Play with the remembered pref reports the gap', /filled 1 gap/i.test(rememberedBadge), rememberedBadge);
+  await page.getByTitle('Stop playback, back to live').click();
+  await page.waitForTimeout(500);
+  check('Stop drops the report again (no recompute while stopped)', (await page.getByTestId('cleanup-badge').innerText()).trim() === '');
 
   check('no page errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

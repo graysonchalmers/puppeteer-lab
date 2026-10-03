@@ -101,7 +101,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const cleaned = useCleanedFrames(
     recorder.getFrames(),
     `${recorder.frameCount}:${recorder.durationMs}`,
-    cleanupPrefs.enabled && recorder.hasData && !recorder.isRecording,
+    // Only while a take is playing: with the remembered pref ON, cleaning on every Stop or import would block the
+    // main thread (about 1 s near the cap on a phone) for a take nobody plays. The badge fills in once Play starts.
+    cleanupPrefs.enabled && recorder.hasData && !recorder.isRecording && recorder.isPlaying,
     cleanupPrefs.strength,
   );
   const playFramesRef = useRef<FrameData[]>([]);
