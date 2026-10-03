@@ -113,7 +113,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const orbitOnRef = useRef(false);
   orbitOnRef.current = orbitOn;
   useOrbitInput(canvasRef, orbitOn && recorder.isPlaying, orbitViewRef);
-  const depthAspect = (() => { const s = recorder.getVideoSize(); return s ? s.width / s.height : 4 / 3; })();
+  const depthAspect = (() => { const s = recorder.getVideoSize(); return s ? s.width / s.height : videoAspectRef.current; })(); // same fallback as takeAspect()
   const depth = useTakeDepth(cleaned.frames, depthAspect, orbitOn && recorder.isPlaying);
   const depthRef = useRef(depth);
   depthRef.current = depth;

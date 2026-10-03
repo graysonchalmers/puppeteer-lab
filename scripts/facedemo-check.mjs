@@ -170,6 +170,19 @@ try {
   await drag(page, 0.3, 0);
   await snap(page, 'orbited-again', STAGE);
   check('...and the stage is orbited again before Stop', (await diff(page, 'orbit-rest', 'orbited-again')) > 0.03);
+
+  // The gaze-ray and mocap-dot overlays are drawn with the front-view mapping, so they must stay off an orbited stage.
+  const overlays = ['GAZE RAYS', 'MOCAP DOTS'];
+  for (const name of overlays) await page.getByRole('button', { name, exact: true }).click();
+  await page.waitForTimeout(500);
+  await snap(page, 'orbited-overlays', STAGE);
+  await page.screenshot({ path: path.join(OUT, '04b-orbit-overlays-on.png') });
+  const overlayOrbit = await diff(page, 'orbited-again', 'orbited-overlays');
+  // Calibration: the overlays are a few dozen dots and short rays, ~0.07% of the stage when drawn (see the front-view
+  // control below), so this must be (near) zero, not the 0.5% used for whole-puppet moves.
+  check('the debug overlays are skipped while orbiting', overlayOrbit < 0.0001, pct(overlayOrbit));
+  for (const name of overlays) await page.getByRole('button', { name, exact: true }).click();
+
   await page.getByTitle('Stop playback, back to live').click();
   await page.waitForTimeout(500);
   await page.getByTestId('play-toggle').click();
@@ -186,6 +199,16 @@ try {
   await page.screenshot({ path: path.join(OUT, '06-orbit-off.png') });
   const off = await diff(page, 'front', 'off');
   check('switching Orbit off returns the default view unchanged', off < 0.005, pct(off));
+
+  // Positive control for the overlay check above: in the front view the same overlays do draw.
+  for (const name of overlays) await page.getByRole('button', { name, exact: true }).click();
+  await page.waitForTimeout(500);
+  await snap(page, 'front-overlays', STAGE);
+  await page.screenshot({ path: path.join(OUT, '07-front-overlays-on.png') });
+  const overlayFront = await diff(page, 'off', 'front-overlays');
+  // Calibration: the overlays are a few dozen one-pixel-radius dots and short rays, so they move only ~0.07% of the stage
+  // (measured 0.07%); anything above 0.03% proves they were drawn, and the orbited check above must stay under 0.01%.
+  check('...and are drawn in the front view (control)', overlayFront > 0.0003, pct(overlayFront));
 
   check('no page errors', errors.length === 0, errors.join(' | '));
 } catch (e) {

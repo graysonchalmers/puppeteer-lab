@@ -136,7 +136,8 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     handR: frame.handR,
   }, p);
   ctx.drawImage(scene.canvas, 0, 0, w, h);
-  if (face) {
+  // The overlays are projected with the ortho front-view mapping `p`; under an orbit camera they would float at front-view positions.
+  if (face && !opts.view) {
     if (opts.showGazeRays && eyeSource) {
       drawGazeRay(ctx, eyeSource, LEFT_EYE_CONTOUR, 468, p);
       drawGazeRay(ctx, eyeSource, RIGHT_EYE_CONTOUR, 473, p);

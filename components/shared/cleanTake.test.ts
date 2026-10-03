@@ -77,6 +77,22 @@ describe('cleanTake: pass-through and safety', () => {
     expect(cleanTake(same, { strength: 0.5 }).frames).toBe(same);
   });
 
+  it('returns a take with a missing or NaN timestamp unchanged instead of throwing', () => {
+    const zero = { gapsFilled: 0, gapsLeft: 0, filledMs: 0 };
+    const base = take(30, (i) => ({ faceLandmarks: face(faceX(i)) }));
+    const variants: FrameData[][] = [
+      base.map((f, i) => (i === 29 ? ({ ...f, timestamp: undefined } as unknown as FrameData) : f)), // last frame: K would be NaN
+      base.map((f, i) => (i === 0 ? { ...f, timestamp: NaN } : f)), // first frame
+      base.map((f, i) => (i === 12 ? { ...f, timestamp: NaN } : f)), // a middle frame
+      base.map((f, i) => (i === 5 ? { ...f, timestamp: Infinity } : f)),
+    ];
+    for (const src of variants) {
+      const r = cleanTake(src, { strength: 0.5 });
+      expect(r.frames).toBe(src);
+      expect(r.report).toEqual(zero);
+    }
+  });
+
   it('skips a take over the grid cap', () => {
     const src = take(MAX_GRID_SLOTS + 100, () => ({ landmarks: [hand(0.5)] }));
     const r = cleanTake(src, { strength: 0.5 });

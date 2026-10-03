@@ -67,10 +67,13 @@ const readPoints = (src: Float64Array, off: number, count: number): Pt[] => {
 
 export function cleanTake(frames: FrameData[], opts: CleanOptions): CleanResult {
   if (frames.length < 2) return passThrough(frames);
+  // A malformed import (a missing or non-numeric timestamp) cannot be put on a grid: hand it back untouched.
+  if (!frames.every((f) => Number.isFinite(f.timestamp))) return passThrough(frames);
   const t0 = frames[0].timestamp;
   const dt = medianDt(frames.map((f) => f.timestamp));
   if (!(dt > 0)) return passThrough(frames);
   const K = Math.floor((frames[frames.length - 1].timestamp - t0) / dt + 1e-6) + 1;
+  if (!Number.isFinite(K)) return passThrough(frames);
   if (K > MAX_GRID_SLOTS) return passThrough(frames, true);
   if (K < 2) return passThrough(frames);
 
