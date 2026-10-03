@@ -10,7 +10,7 @@ import type { MeshDetail } from './faceGeometry'; // type-only: faceGeometry imp
 import { FACE_TRIS, FACE_TRIS_FULL, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from './faceTopology';
 
 const NOSTRILS = [49, 279, 129, 358, 98, 327, 64, 294, 48, 278, 219, 439, 59, 289, 2, 97, 326];
-const UNDER_LIP = [17, 84, 314, 18, 83, 313, 200, 421, 199];
+const UNDER_LIP = [17, 84, 314, 18, 83, 313];
 
 export const CAVITY_VERTS: ReadonlySet<number> = new Set([...LEFT_EYE_CONTOUR, ...RIGHT_EYE_CONTOUR, ...NOSTRILS, ...UNDER_LIP]);
 
