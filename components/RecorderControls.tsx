@@ -133,6 +133,7 @@ const RecorderControls: React.FC<RecorderControlsProps> = ({
 
                 {/* Play / Pause */}
                 <button
+                    data-testid="play-toggle"
                     onClick={onPlayToggle}
                     disabled={!hasData || isRecording || busy}
                     className={`w-11 h-11 rounded-full border flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed ${

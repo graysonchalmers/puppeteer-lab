@@ -505,7 +505,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
           )}
 
           <video ref={videoRef} className="absolute opacity-0 pointer-events-none w-px h-px" autoPlay playsInline muted />
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+          <canvas ref={canvasRef} data-testid="stage-canvas" className="absolute inset-0 w-full h-full" />
           
           {/* Picture-in-Picture Webcam (Minimized to bottom corner) */}
           {showPip && started && !error && !cameraIssue && status !== 'lost' && (

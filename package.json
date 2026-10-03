@@ -15,6 +15,7 @@
     "phone-check": "npm run build && node scripts/phone-check.mjs",
     "cleanup-check": "npm run build && node scripts/cleanup-check.mjs",
     "orbit-check": "npm run build && node scripts/orbit-check.mjs",
+    "facedemo-check": "npm run build && node scripts/facedemo-check.mjs",
     "stamp": "node scripts/build-stamp.mjs --print",
     "share-check": "npm run build && node scripts/share-check.mjs",
     "server": "node server/index.mjs"

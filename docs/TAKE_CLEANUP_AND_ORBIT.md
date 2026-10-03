@@ -37,4 +37,4 @@ Hand depth is estimated from apparent size (face width 14.5 cm, hand wrist-to-kn
 
 ## Checks
 
-`npm run cleanup-check` and `npm run orbit-check` are browser gates (build first, run last). Orbit's gate also records a drag-orbit video and repeats a drag in WebKit on the iPhone profile; proof lands in `.proof/<date>-orbit/` (gitignored).
+`npm run cleanup-check` and `npm run orbit-check` are browser gates (build first, run last). Orbit's gate also records a drag-orbit video and repeats a drag in WebKit on the iPhone profile; proof lands in `.proof/<date>-orbit/` (gitignored). `npm run facedemo-check` covers the live app's own playback path (Face Puppet: import a take, Clean up on a short dropout, Orbit drag/reset/stop/off) the same way; proof lands in `.proof/<date>-facedemo/`.

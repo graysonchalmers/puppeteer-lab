@@ -83,13 +83,13 @@ export async function seek(page, ms) {
   await page.waitForTimeout(450);
 }
 
-/** Copy the stage canvas pixels into window.__snaps[name]. */
-export async function snap(page, name) {
-  await page.evaluate((n) => {
-    const c = document.querySelector('[data-testid=take-canvas]');
+/** Copy the stage canvas pixels into window.__snaps[name]. The viewer's canvas by default; Face Puppet's is stage-canvas. */
+export async function snap(page, name, selector = '[data-testid=take-canvas]') {
+  await page.evaluate(([n, sel]) => {
+    const c = document.querySelector(sel);
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     (window.__snaps ??= {})[n] = new Uint8ClampedArray(d);
-  }, name);
+  }, [name, selector]);
 }
 
 /** Fraction of pixels whose largest channel difference exceeds 24. */
