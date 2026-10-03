@@ -16,7 +16,7 @@ _Last updated: 2026-10-03 (CT)_
 - **Gates at the last full run:** typecheck clean, 321+ tests, smoke OK, `npm run phone-check` 97/97 (flaky under low RAM: fixed-wait drawer/mic checks; passes on re-run), `npm run share-check` 28/28 (real server + vite preview, Chromium desktop flow, WebKit iPhone Save + rotation, pull script). The image now builds on apps-01. Live checks passed (health, config, 503, admin 401, `/t/<id>` viewer not-found state); the upload path itself has NOT been exercised live.
 
 ## 🆕 Open after the cleanup/orbit build
-1. Push `main` and redeploy (Web-less: this app deploys to apps-01 per `deploy-live`), then check Clean up / Orbit on a real iPhone (touch drag, pinch, double-tap, `touch-action`, memory and the ~1 s sync clean near the cap are unverified).
+1. Push `main` and redeploy (static deploy to apps-01, see `docs/SHARE_LINKS.md` and the roadmap), then check Clean up / Orbit on a real iPhone (touch drag, pinch, double-tap, `touch-action`, memory and the ~1 s sync clean near the cap are unverified).
 2. Deferred from the final review: `trackHands` lacks the spec's free-slot rule for a lone hand; hands always draw over the face in orbit (`clearDepth`); hands can pass behind the camera at zoom 0.5; cleanup recomputes after every recording Stop when the remembered pref is ON (consider computing only when playing); smoother segment tails keep a few px of causal lag. Full list: `handoff-log/2026-10-03-take-cleanup-and-orbit.md`.
 
 ## 📌 Where we stopped
