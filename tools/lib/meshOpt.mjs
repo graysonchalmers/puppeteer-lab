@@ -200,5 +200,118 @@ export function optimize(trisIn, { pos2, pos3, locked = new Set(), ...opts }) {
   return { tris, flips, sweeps, frozen: frozen.size };
 }
 
-// Task 2 appends enforceEdge, enforceChains, qualityReport and formatReport below this line; they reuse windingInfo
-// and flipCandidate (keep those two module-private helpers in this file).
+/** Proper intersection (not at endpoints) of segments a-b and p-q in 2D. */
+const crosses = (pos2, a, b, p, q) => {
+  const A = pos2[a], B = pos2[b], P = pos2[p], Q = pos2[q];
+  return orient2(A, B, P) * orient2(A, B, Q) < 0 && orient2(P, Q, A) * orient2(P, Q, B) < 0;
+};
+
+/**
+ * Makes edge a-b present by flipping the edges that cross it (convex quads only). Throws if it crosses a locked edge,
+ * if no crossing edge can be flipped (for example the segment passes through another vertex), or after `maxFlips`.
+ */
+export function enforceEdge(trisIn, pos2, a, b, locked = new Set(), maxFlips = 5000) {
+  const tris = trisIn.map((t) => t.slice());
+  const { sign0, frozen } = windingInfo(tris, pos2);
+  const target = edgeKey(a, b);
+  let flips = 0;
+  for (;;) {
+    const adj = buildAdjacency(tris);
+    if (adj.has(target)) return { tris, flips };
+    if (flips >= maxFlips) throw new Error(`edge ${a}-${b} cannot be enforced: flip cap reached`);
+    const crossing = [...adj.keys()].sort((x, y) => x - y).filter((k) => {
+      const [p, q] = keyEdge(k);
+      return p !== a && p !== b && q !== a && q !== b && crosses(pos2, a, b, p, q);
+    });
+    if (!crossing.length) throw new Error(`edge ${a}-${b} cannot be enforced: no crossing edge to flip`);
+    let done = false;
+    for (const k of crossing) {
+      if (locked.has(k)) {
+        const [p, q] = keyEdge(k);
+        throw new Error(`edge ${a}-${b} crosses locked edge ${p}-${q}`);
+      }
+      const f = flipCandidate(tris, adj, k, pos2, sign0, frozen);
+      if (f) { tris[f.i1] = f.n1; tris[f.i2] = f.n2; flips++; done = true; break; }
+    }
+    if (!done) throw new Error(`edge ${a}-${b} cannot be enforced: no convex crossing edge`);
+  }
+}
+
+/** Enforces each chain's consecutive edges in order and locks them. See the plan for the optional-chain rollback rule. */
+export function enforceChains(trisIn, pos2, chains, { locked = new Set() } = {}) {
+  let cur = trisIn;
+  const lockedOut = new Set(locked);
+  let flips = 0;
+  const dropped = [];
+  for (const ch of chains) {
+    const added = [];
+    try {
+      let t = cur;
+      for (let i = 0; i + 1 < ch.ids.length; i++) {
+        const r = enforceEdge(t, pos2, ch.ids[i], ch.ids[i + 1], lockedOut);
+        t = r.tris;
+        flips += r.flips;
+        const k = edgeKey(ch.ids[i], ch.ids[i + 1]);
+        if (!lockedOut.has(k)) { lockedOut.add(k); added.push(k); }
+      }
+      cur = t;
+    } catch (e) {
+      for (const k of added) lockedOut.delete(k);
+      if (!ch.optional) throw new Error(`chain "${ch.name}": ${e.message}`);
+      dropped.push(ch.name);
+    }
+  }
+  return { tris: cur, locked: lockedOut, flips, dropped };
+}
+
+const deg = (r) => (r * 180) / Math.PI;
+
+export function qualityReport(tris, pos3) {
+  const adj = buildAdjacency(tris);
+  const val = valences(adj);
+  const bv = boundaryVertices(boundaryKeys(tris));
+  const minAngles = [];
+  let aspectOver3 = 0;
+  for (const t of tris) {
+    const [a, b, c] = t.map((i) => pos3[i]);
+    const la = len(sub(b, c)), lb = len(sub(a, c)), lc = len(sub(a, b));
+    const ang = (opp, s1, s2) => deg(Math.acos(Math.max(-1, Math.min(1, (s1 * s1 + s2 * s2 - opp * opp) / (2 * s1 * s2 || 1)))));
+    minAngles.push(Math.min(ang(la, lb, lc), ang(lb, la, lc), ang(lc, la, lb)));
+    const area = 0.5 * len(cross(sub(b, a), sub(c, a)));
+    const longest = Math.max(la, lb, lc);
+    if (!(area > 0) || (longest * longest) / (2 * area) > 3) aspectOver3++;
+  }
+  const hist = {};
+  let interior = 0, ok = 0;
+  for (const [x, n] of val) {
+    if (bv.has(x)) continue;
+    interior++;
+    hist[n] = (hist[n] ?? 0) + 1;
+    if (n >= 5 && n <= 7) ok++;
+  }
+  const dih = [];
+  for (const l of adj.values()) if (l.length === 2) dih.push(deg(dihedral(pos3, tris[l[0]], tris[l[1]])));
+  dih.sort((x, y) => x - y);
+  return {
+    tris: tris.length,
+    minAngleMin: Math.min(...minAngles),
+    minAngleMean: minAngles.reduce((s, x) => s + x, 0) / minAngles.length,
+    slivers20: minAngles.filter((x) => x < 20).length,
+    aspectOver3,
+    interiorVertices: interior,
+    valenceHistogram: hist,
+    valenceShare5to7: interior ? ok / interior : 0,
+    dihedralMean: dih.length ? dih.reduce((s, x) => s + x, 0) / dih.length : 0,
+    dihedral90: dih.length ? dih[Math.floor(0.9 * (dih.length - 1))] : 0,
+  };
+}
+
+export function formatReport(name, r) {
+  const f = (x) => x.toFixed(2);
+  return [
+    `${name}: ${r.tris} triangles`,
+    `  min angle: worst ${f(r.minAngleMin)} deg, mean ${f(r.minAngleMean)} deg; under 20 deg: ${r.slivers20}; aspect over 3: ${r.aspectOver3}`,
+    `  interior valence: ${JSON.stringify(r.valenceHistogram)} (${(100 * r.valenceShare5to7).toFixed(1)}% at 5..7 of ${r.interiorVertices})`,
+    `  dihedral across interior edges: mean ${f(r.dihedralMean)} deg, 90th percentile ${f(r.dihedral90)} deg`,
+  ].join('\n');
+}

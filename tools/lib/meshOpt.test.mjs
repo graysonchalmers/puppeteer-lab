@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize } from './meshOpt.mjs';
+import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize, enforceEdge, enforceChains, qualityReport, formatReport } from './meshOpt.mjs';
 
 /** n x n vertex grid; every cell split along the same diagonal; pos3 gets a bumpy height field. */
 function grid(n, bumpy = true) {
@@ -102,5 +102,60 @@ describe('optimize', () => {
     expect(new Set(signs(r1.tris, pos2))).toEqual(new Set([1]));
     expect(totalEnergy(r1.tris, opts)).toBeLessThan(totalEnergy(tris, opts));
     for (const l of buildAdjacency(r1.tris).values()) expect(l.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('enforceEdge / enforceChains', () => {
+  it('forces an edge across several crossings without changing the triangle count', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const a = id(0, 0), b = id(1, 3); // segment (0,0)-(3,1): crosses several cell edges
+    expect(buildAdjacency(tris).has(edgeKey(a, b))).toBe(false);
+    const r = enforceEdge(tris, pos2, a, b);
+    expect(r.flips).toBeGreaterThan(0);
+    expect(buildAdjacency(r.tris).has(edgeKey(a, b))).toBe(true);
+    expect(r.tris).toHaveLength(tris.length);
+    expect(verts(r.tris)).toEqual(verts(tris));
+    expect(new Set(signs(r.tris, pos2))).toEqual(new Set([1]));
+  });
+
+  it('throws when the constraint crosses a locked edge', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const locked = new Set([edgeKey(id(0, 1), id(1, 1))]); // vertical edge x=1, crossed by (0,0)-(3,1)
+    expect(() => enforceEdge(tris, pos2, id(0, 0), id(1, 3), locked)).toThrow(/locked/);
+  });
+
+  it('throws (never hangs) when the segment passes exactly through another vertex', () => {
+    const { pos2, tris, id } = grid(5, false);
+    expect(() => enforceEdge(tris, pos2, id(0, 0), id(2, 2))).toThrow(/cannot be enforced/);
+  });
+
+  it('enforces a chain and locks its edges; an unrecoverable optional chain is dropped and rolled back', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const good = { name: 'good', ids: [id(0, 0), id(1, 2), id(0, 4)] };
+    const bad = { name: 'bad', ids: [id(0, 0), id(2, 2)], optional: true };
+    const r = enforceChains(tris, pos2, [good, bad]);
+    expect(r.dropped).toEqual(['bad']);
+    const adj = buildAdjacency(r.tris);
+    expect(adj.has(edgeKey(id(0, 0), id(1, 2)))).toBe(true);
+    expect(adj.has(edgeKey(id(1, 2), id(0, 4)))).toBe(true);
+    expect(r.locked.has(edgeKey(id(0, 0), id(1, 2)))).toBe(true);
+    expect(r.locked.has(edgeKey(id(0, 0), id(2, 2)))).toBe(false);
+    expect(() => enforceChains(tris, pos2, [{ name: 'must', ids: [id(0, 0), id(2, 2)] }])).toThrow(/chain "must"/);
+  });
+});
+
+describe('qualityReport', () => {
+  it('describes a flat unit grid: right isosceles triangles, valence 6 inside', () => {
+    const { pos3, tris } = grid(5, false);
+    const r = qualityReport(tris, pos3);
+    expect(r.tris).toBe(32);
+    expect(r.minAngleMin).toBeCloseTo(45, 5);
+    expect(r.minAngleMean).toBeCloseTo(45, 5);
+    expect(r.slivers20).toBe(0);
+    expect(r.aspectOver3).toBe(0);
+    expect(r.interiorVertices).toBe(9);
+    expect(r.valenceShare5to7).toBe(1);
+    expect(r.dihedralMean).toBeCloseTo(0, 5);
+    expect(formatReport('flat', r)).toMatch(/flat/);
   });
 });
