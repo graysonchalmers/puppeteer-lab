@@ -34,6 +34,13 @@ export interface Look {
   /** Inverted-hull outline; `width` is in scene units (stage pixels). */
   outline?: { color: number; width: number };
   handColor: number;
+  /**
+   * Shade the face with its outward normals. The mirrored face is drawn back-facing, so three's double-sided shading
+   * inverts the stored normals and the face is lit as if every light came from the opposite side (the hands are not).
+   * `default` was tuned under that inversion and keeps it (false); the candidates set true so face and hands share
+   * the same light directions and specular works.
+   */
+  trueNormals: boolean;
 }
 
 const WHITE = 0xffffff;
@@ -48,7 +55,7 @@ export const LOOKS: Record<LookId, Look> = {
       { color: WHITE, intensity: 0.7, pos: [0.8, -0.2, 0.8] },
       { color: WHITE, intensity: 2.5, pos: [0.3, 0.8, -1] },
     ],
-    handColor: 0xa3a7ad,
+    handColor: 0xa3a7ad, trueNormals: false,
   },
   // Starting values; tuned on the comparison sheet (scripts/looks-sheet.mjs).
   clay: {
@@ -60,7 +67,7 @@ export const LOOKS: Record<LookId, Look> = {
       { color: 0xdfe8ff, intensity: 0.6, pos: [0.9, -0.1, 0.7] },
       { color: 0xbcd4ff, intensity: 1.6, pos: [0.4, 0.9, -1] },
     ],
-    handColor: 0xc9a791,
+    handColor: 0xc9a791, trueNormals: true,
   },
   faceted: {
     id: 'faceted', background: 0x08090b, skinGray: 0.66, lipGray: 0.48, creaseAngle: 0,
@@ -71,7 +78,7 @@ export const LOOKS: Record<LookId, Look> = {
       { color: WHITE, intensity: 1.5, pos: [0.6, 0.4, -1] },
     ],
     hemisphere: { sky: 0xeaf2ff, ground: 0x2a2420, intensity: 0.6 },
-    handColor: 0xa9b0ba,
+    handColor: 0xa9b0ba, trueNormals: true,
   },
   toon: {
     id: 'toon', background: 0x14161b, skinGray: 0.78, lipGray: 0.5, creaseAngle: 60,
@@ -79,7 +86,7 @@ export const LOOKS: Record<LookId, Look> = {
     ambient: { color: WHITE, intensity: 0.35 },
     lights: [{ color: WHITE, intensity: 2.4, pos: [-0.7, 0.7, 0.8] }],
     outline: { color: 0x050505, width: 3 },
-    handColor: 0xe4c3ad,
+    handColor: 0xe4c3ad, trueNormals: true,
   },
   neon: {
     id: 'neon', background: 0x050508, skinGray: 0.3, lipGray: 0.22, creaseAngle: null,
@@ -90,7 +97,7 @@ export const LOOKS: Record<LookId, Look> = {
       { color: 0xff2bd6, intensity: 3.2, pos: [1, 0.2, 0.5] },
       { color: WHITE, intensity: 1.2, pos: [0, 0.9, -1] },
     ],
-    handColor: 0x7a86c8,
+    handColor: 0x7a86c8, trueNormals: true,
   },
 };
 

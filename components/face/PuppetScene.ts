@@ -31,8 +31,9 @@ const LIP_SEAM = 0x15171b;
 const BROW = 0x16181c;
 const TOOTH_BAND = 0.08;
 const TOOTH_BAND_MAX_HALF_GAP = 0.6;
-/** The outline hull sits this many outline-widths behind the skin so it never pokes through sloped triangles. */
-const OUTLINE_DEPTH = 3;
+/** Floor on the view-perpendicular normal length when widening the hull, so a rim normal that leans toward the camera
+ * (forehead, chin edge of the mask) still gets a near-full outline width; caps the stretch at 1/this. */
+const OUTLINE_MIN_PERP = 0.5;
 const MAX_JOINTS = 42; // 2 hands x 21
 
 export interface SceneView extends OrbitView {
@@ -67,10 +68,28 @@ function fillRig(rig: THREE.Group, look: Look) {
   }
 }
 
+/** Toon ramp texels; the toon shader samples it at dotNL * 0.5 + 0.5, so texel i covers dotNL in [2i/T - 1, 2(i+1)/T - 1). */
+const TOON_TEXELS = 32;
+/** Band 0 (shadow) is everything turned away from the light; each of the bands-1 lit bands spans TOON_SPAN/(bands-1)
+ * of dotNL above 0, and the top one runs on to 1. */
+const TOON_SPAN = 0.45;
+const TOON_SHADOW = 0.12;
+const TOON_MID = 0.5;
+
 function toonGradient(bands: number): THREE.DataTexture {
-  const data = new Uint8Array(bands);
-  for (let i = 0; i < bands; i++) data[i] = Math.round(255 * (0.25 + 0.75 * (i / (bands - 1))));
-  const t = new THREE.DataTexture(data, bands, 1, THREE.RedFormat);
+  // A hard terminator at dotNL = 0 (cel shadow), then bands-1 lit steps from TOON_MID up to full, so the shadow shape
+  // is cut by the light direction and not by the ramp's even thirds.
+  const data = new Uint8Array(TOON_TEXELS);
+  for (let i = 0; i < TOON_TEXELS; i++) {
+    const dot = ((i + 0.5) / TOON_TEXELS) * 2 - 1;
+    let level = TOON_SHADOW;
+    if (dot > 0) {
+      const k = Math.min(bands - 2, Math.floor((dot / TOON_SPAN) * (bands - 1)));
+      level = bands === 2 ? 1 : TOON_MID + (1 - TOON_MID) * (k / (bands - 2));
+    }
+    data[i] = Math.round(255 * level);
+  }
+  const t = new THREE.DataTexture(data, TOON_TEXELS, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
   t.needsUpdate = true;
@@ -300,7 +319,10 @@ export class PuppetScene {
         this.outlinePos = new Float32Array(this.faceBuf.positions.length);
         const og = new THREE.BufferGeometry();
         og.setAttribute('position', new THREE.BufferAttribute(this.outlinePos, 3));
-        this.outlineMesh = new THREE.Mesh(og, new THREE.MeshBasicMaterial({ color: this.look.outline.color, side: THREE.BackSide }));
+        // Drawn first and without depth writes, so the skin and every face part always paint over it: the hull only
+        // shows where it sticks out past the skin's silhouette, never as slivers through sloped triangles.
+        this.outlineMesh = new THREE.Mesh(og, new THREE.MeshBasicMaterial({ color: this.look.outline.color, side: THREE.BackSide, depthWrite: false }));
+        this.outlineMesh.renderOrder = -1;
         this.outlineMesh.frustumCulled = false;
         this.faceScene.add(this.outlineMesh);
       }
@@ -329,19 +351,27 @@ export class PuppetScene {
       this.ensureFace(input.meshDetail, angle);
       updateFaceBuffers(this.faceBuf, input.meshDetail, face, p, this.crease.groups!);
       if (this.outlineMesh && this.outlinePos && this.look.outline) {
-        // The mirrored mesh winds back-facing, so BackSide draws the face's own triangles: the hull must sit behind the
-        // skin. Push out perpendicular to the view direction (so only the rim shows) and back along it.
+        // The mirrored mesh winds back-facing, so BackSide draws the face's own triangles. Grow the hull outward,
+        // perpendicular to the view direction only (the outward normal minus its view component), so the rim widens on
+        // screen by about `width`. Depth needs no offset: the hull is drawn first without depth writes (see ensureFace).
         const f = this.viewDir;
         if (view) cam.getWorldDirection(f); else f.set(0, 0, -1);
         const w = this.look.outline.width, P = this.faceBuf.positions, N = this.faceBuf.normals, O = this.outlinePos;
-        const back = w * OUTLINE_DEPTH;
         for (let i = 0; i < P.length; i += 3) {
           const nf = N[i] * f.x + N[i + 1] * f.y + N[i + 2] * f.z;
-          O[i] = P[i] + (N[i] - nf * f.x) * w + f.x * back;
-          O[i + 1] = P[i + 1] + (N[i + 1] - nf * f.y) * w + f.y * back;
-          O[i + 2] = P[i + 2] + (N[i + 2] - nf * f.z) * w + f.z * back;
+          const px = N[i] - nf * f.x, py = N[i + 1] - nf * f.y, pz = N[i + 2] - nf * f.z;
+          const s = w / Math.max(Math.hypot(px, py, pz), OUTLINE_MIN_PERP);
+          O[i] = P[i] + px * s;
+          O[i + 1] = P[i + 1] + py * s;
+          O[i + 2] = P[i + 2] + pz * s;
         }
         this.outlineMesh.geometry.getAttribute('position').needsUpdate = true;
+      }
+      if (this.look.trueNormals) {
+        // After the hull (which needs the outward normals): three inverts a back-facing triangle's normal, so store the
+        // inward one and the shader ends up with the outward normal.
+        const N = this.faceBuf.normals;
+        for (let i = 0; i < N.length; i++) N[i] = -N[i];
       }
       const g = this.faceMesh.geometry;
       g.getAttribute('position').needsUpdate = true;
