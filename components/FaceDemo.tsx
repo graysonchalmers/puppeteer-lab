@@ -20,7 +20,9 @@ import { Facing } from '../hooks/cameraSupport';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { frameToCapture } from './face/captureFrame';
 import { viewFrame } from './shared/mirrorFrame';
-import { useRecorder } from '../hooks/useRecorder';
+import { useRecorder, findFrameIndex } from '../hooks/useRecorder';
+import PlaybackOptions from './PlaybackOptions';
+import { useCleanedFrames, useCleanupPrefs } from '../hooks/useCleanedFrames';
 import RecorderControls from './RecorderControls';
 import SaveLink from './SaveLink';
 import { useSaveLink } from '../hooks/useSaveLink';
@@ -90,6 +92,17 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
 
   // Recorder Hook
   const recorder = useRecorder('FACE', audioStreamRef); // takes use the mic the camera request already got: no prompt on Record
+
+  // Cleanup is a playback layer: it never touches the buffer, the exports or the upload (all raw).
+  const [cleanupPrefs, setCleanupPrefs] = useCleanupPrefs();
+  const cleaned = useCleanedFrames(
+    recorder.getFrames(),
+    `${recorder.frameCount}:${recorder.durationMs}`,
+    cleanupPrefs.enabled && recorder.hasData && !recorder.isRecording,
+    cleanupPrefs.strength,
+  );
+  const playFramesRef = useRef<FrameData[]>([]);
+  playFramesRef.current = cleaned.frames; // read by the render loop, whose effect does not re-run on a toggle
 
   // Save & get link state lives here, not in SaveLink: rotating a phone remounts the recorder panel (drawer <-> desktop).
   const saveLink = useSaveLink(() => recorder.buildRecordingBlob('full'), `${recorder.frameCount}:${recorder.durationMs}`);
@@ -183,7 +196,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
               }
               // If Playing, read from buffer
               else if (recorder.isPlaying) {
-                  const frame = recorder.getPlaybackFrame();
+                  const rawFrame = recorder.getPlaybackFrame(); // also advances the loop and the clock
+                  const pf = playFramesRef.current;
+                  const frame = pf.length > 0 ? pf[findFrameIndex(pf, recorder.getPlaybackTimeMs())] : rawFrame;
                   if (frame) {
                       currentLandmarks = frame.faceLandmarks;
                       currentBlendshapesRecord = frame.blendshapes || {};
@@ -403,11 +418,23 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
       { id: 'pack', label: 'Pack (.zip)', hint: 'Video + recording.json + audio', onSelect: () => runExport('pack') },
     ],
     footer: (
-      <SaveLink
-        state={saveLink}
-        disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
-        hasAudio={recorder.hasAudio}
-      />
+      <>
+        <PlaybackOptions
+          cleanup={{
+            enabled: cleanupPrefs.enabled,
+            strength: cleanupPrefs.strength,
+            report: cleaned.report,
+            onEnabled: (enabled) => setCleanupPrefs({ enabled }),
+            onStrength: (strength) => setCleanupPrefs({ strength }),
+          }}
+          disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
+        />
+        <SaveLink
+          state={saveLink}
+          disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
+          hasAudio={recorder.hasAudio}
+        />
+      </>
     ),
   };
 

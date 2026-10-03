@@ -12,6 +12,8 @@ import { takeShape, TakeShape } from './shared/takeShape';
 import { findFrameIndex } from '../hooks/useRecorder';
 import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
+import PlaybackOptions from './PlaybackOptions';
+import { useCleanedFrames, useCleanupPrefs } from '../hooks/useCleanedFrames';
 
 type Loaded = TakeShape & { audioUrl: string | null; expiresAt: number | null };
 type View = { kind: 'loading' } | { kind: 'expired' } | { kind: 'not-found' } | { kind: 'error' } | { kind: 'ready'; take: Loaded };
@@ -49,6 +51,10 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
   const startRef = useRef(0); // performance.now() at take time 0 while playing
   const pausedAtRef = useRef(0);
   const stateRef = useRef(INITIAL_PUPPET_STATE);
+  const [prefs, setPrefs] = useCleanupPrefs();
+  const cleaned = useCleanedFrames(take.frames, '', prefs.enabled, prefs.strength);
+  const framesRef = useRef(take.frames);
+  framesRef.current = cleaned.frames; // read by the draw loop, which does not re-run when the switch flips
   const [playing, setPlaying] = useState(false);
   const [clockMs, setClockMs] = useState(0);
   const [nowWall, setNowWall] = useState(() => Date.now());
@@ -85,7 +91,8 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
         const a = audioRef.current;
         if (a) { a.currentTime = 0; a.play().catch(() => {}); }
       }
-      const frame = take.frames[findFrameIndex(take.frames, t)];
+      const frames = framesRef.current;
+      const frame = frames[findFrameIndex(frames, t)];
       stateRef.current = stepPuppetState(stateRef.current, frame.faceLandmarks, frame.blendshapes || {}, take.aspect, 0.5);
       drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current }, canvas.width, canvas.height, {
         showGazeRays: false, showMocapDots: false, videoAspect: take.aspect,
@@ -153,6 +160,15 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
           <span data-testid="take-clock" className="tabular-nums shrink-0">{fmt(clockMs)} / {fmt(take.durationMs)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <PlaybackOptions
+            cleanup={{
+              enabled: prefs.enabled,
+              strength: prefs.strength,
+              report: cleaned.report,
+              onEnabled: (enabled) => setPrefs({ enabled }),
+              onStrength: (strength) => setPrefs({ strength }),
+            }}
+          />
           <a
             data-testid="take-download"
             href={`/api/takes/${id}?download=1`}
