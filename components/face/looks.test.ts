@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LOOKS, DEFAULT_LOOK_ID, lookById, LookId } from './looks';
-import { SKIN_GRAY, LIP_GRAY } from './faceGeometry';
+import { LOOKS, DEFAULT_LOOK_ID, lookById, shadeOf, LookId } from './looks';
+import { SKIN_GRAY, LIP_GRAY, DEFAULT_SHADE } from './faceGeometry';
 
 const IDS = Object.keys(LOOKS) as LookId[];
 const isColor = (c: number) => Number.isInteger(c) && c >= 0 && c <= 0xffffff;
@@ -56,5 +56,9 @@ describe('looks', () => {
     for (const bad of [null, undefined, '', 'CLAY', 'nope', '__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
       expect(lookById(bad)).toBe(LOOKS.default);
     }
+  });
+  it('shadeOf(default) equals DEFAULT_SHADE and maps tint/cavity for other looks', () => {
+    expect(shadeOf(LOOKS.default)).toEqual(DEFAULT_SHADE);
+    expect(shadeOf(LOOKS.neon)).toEqual({ skinGray: 0.3, lipGray: 0.22, skinTint: 0xb8c4ff, lipTint: 0xff9ad0, cavity: 0.8 });
   });
 });

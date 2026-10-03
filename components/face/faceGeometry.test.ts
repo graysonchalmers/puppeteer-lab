@@ -6,8 +6,9 @@ import { describe, it, expect } from 'vitest';
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection } from './projection';
 import { buildCreaseGroups } from './creaseGroups';
-import { FACE_MESHES, createFaceBuffers, updateFaceBuffers, SKIN_GRAY, LIP_GRAY } from './faceGeometry';
+import { FACE_MESHES, createFaceBuffers, updateFaceBuffers, SKIN_GRAY, LIP_GRAY, DEFAULT_SHADE } from './faceGeometry';
 import { CANONICAL_VERTS } from './faceTopology';
+import { cornerCavity } from './cavity';
 
 // Canonical face as landmarks (y flipped to image-down), 478 points.
 const canonical = (): Landmark[] => {
@@ -65,5 +66,42 @@ describe('faceGeometry', () => {
     const buf = createFaceBuffers('low');
     updateFaceBuffers(buf, 'low', lm, p, buildCreaseGroups(FACE_MESHES.low.tris, CANONICAL_VERTS, 0));
     for (let k = 0; k < 3; k++) expect(buf.normals[3 + k]).toBeCloseTo(buf.normals[k]);
+  });
+});
+
+describe('createFaceBuffers shade', () => {
+  it('the default shade reproduces the pre-looks gray and lip gray exactly', () => {
+    for (const d of ['low', 'full'] as const) {
+      const { isLip } = FACE_MESHES[d];
+      const buf = createFaceBuffers(d);
+      for (let t = 0; t < isLip.length; t++) {
+        const g = isLip[t] ? LIP_GRAY : SKIN_GRAY;
+        for (let k = 0; k < 9; k++) expect(buf.colors[t * 9 + k]).toBeCloseTo(g, 6);
+      }
+    }
+  });
+  it('tint multiplies per channel and lips use the lip tint', () => {
+    const shade = { ...DEFAULT_SHADE, skinGray: 1, lipGray: 1, skinTint: 0xff8000, lipTint: 0x0000ff };
+    const { isLip } = FACE_MESHES.low;
+    const buf = createFaceBuffers('low', shade);
+    const t = isLip.indexOf(0), l = isLip.indexOf(1);
+    expect([buf.colors[t * 9], buf.colors[t * 9 + 1], buf.colors[t * 9 + 2]].map((x) => +x.toFixed(3))).toEqual([1, 0.502, 0]);
+    expect([buf.colors[l * 9], buf.colors[l * 9 + 1], buf.colors[l * 9 + 2]].map((x) => +x.toFixed(3))).toEqual([0, 0, 1]);
+  });
+  it('cavity darkens only cavity corners, in both meshes (look survives a detail switch)', () => {
+    const shade = { ...DEFAULT_SHADE, cavity: 0.5 };
+    for (const d of ['low', 'full'] as const) {
+      const w = cornerCavity(d);
+      const plain = createFaceBuffers(d);
+      const dark = createFaceBuffers(d, shade);
+      let hit = 0;
+      for (let c = 0; c < w.length; c++) {
+        for (let k = 0; k < 3; k++) {
+          const a = plain.colors[c * 3 + k], b = dark.colors[c * 3 + k];
+          if (w[c]) { expect(b).toBeCloseTo(a * 0.5, 6); hit++; } else expect(b).toBeCloseTo(a, 6);
+        }
+      }
+      expect(hit).toBeGreaterThan(0);
+    }
   });
 });

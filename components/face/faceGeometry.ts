@@ -11,6 +11,7 @@ import { Landmark } from '../shared/trackerTypes';
 import { Projection } from './projection';
 import { CreaseGroups } from './creaseGroups';
 import { FACE_TRIS, FACE_TRI_IS_LIP, FACE_TRIS_FULL, FACE_TRI_IS_LIP_FULL } from './faceTopology';
+import { cornerCavity } from './cavity';
 
 export type MeshDetail = 'low' | 'full';
 
@@ -30,11 +31,24 @@ export interface FaceBuffers {
   faceNormals: Float32Array;
 }
 
-export function createFaceBuffers(detail: MeshDetail): FaceBuffers {
+export interface FaceShade { skinGray: number; lipGray: number; skinTint: number; lipTint: number; cavity: number }
+export const DEFAULT_SHADE: FaceShade = { skinGray: SKIN_GRAY, lipGray: LIP_GRAY, skinTint: 0xffffff, lipTint: 0xffffff, cavity: 0 };
+
+export function createFaceBuffers(detail: MeshDetail, shade: FaceShade = DEFAULT_SHADE): FaceBuffers {
   const { tris, isLip } = FACE_MESHES[detail];
   const nTris = tris.length / 3;
   const colors = new Float32Array(nTris * 9);
-  for (let t = 0; t < nTris; t++) colors.fill(isLip[t] ? LIP_GRAY : SKIN_GRAY, t * 9, t * 9 + 9);
+  const cav = shade.cavity > 0 ? cornerCavity(detail) : null;
+  const rgb = (tint: number): [number, number, number] => [(tint >> 16) & 255, (tint >> 8) & 255, tint & 255].map((v) => v / 255) as [number, number, number];
+  const skin = rgb(shade.skinTint), lip = rgb(shade.lipTint);
+  for (let t = 0; t < nTris; t++) {
+    const gray = isLip[t] ? shade.lipGray : shade.skinGray;
+    const tint = isLip[t] ? lip : skin;
+    for (let k = 0; k < 3; k++) {
+      const dim = cav ? 1 - shade.cavity * cav[t * 3 + k] : 1;
+      for (let ch = 0; ch < 3; ch++) colors[t * 9 + k * 3 + ch] = gray * tint[ch] * dim;
+    }
+  }
   return {
     positions: new Float32Array(nTris * 9),
     normals: new Float32Array(nTris * 9),

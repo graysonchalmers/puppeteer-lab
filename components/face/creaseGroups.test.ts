@@ -43,4 +43,10 @@ describe('buildCreaseGroups', () => {
     for (let c = 0; c < FACE_TRIS.length; c++) if (g.offsets[c + 1] - g.offsets[c] > 1) shared++;
     expect(shared / FACE_TRIS.length).toBeGreaterThan(0.9);
   });
+  it('crease angle 0 builds groups where every corner only sees its own triangle', () => {
+    const g = buildCreaseGroups(FACE_TRIS, CANONICAL_VERTS, 0);
+    const corners = FACE_TRIS.length;
+    expect(g.offsets.length).toBe(corners + 1);
+    for (let c = 0; c < corners; c++) expect(g.offsets[c + 1] - g.offsets[c]).toBe(1);
+  });
 });

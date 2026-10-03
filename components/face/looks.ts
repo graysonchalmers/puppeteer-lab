@@ -7,7 +7,7 @@
  * chosen one replaces `default` and the rest are deleted. Colors are 0xRRGGBB; light positions are in the rig's
  * camera-locked frame (+x right, +y up, +z toward the viewer).
  */
-import { SKIN_GRAY, LIP_GRAY } from './faceGeometry';
+import { SKIN_GRAY, LIP_GRAY, FaceShade } from './faceGeometry';
 
 export type LookId = 'default' | 'clay' | 'faceted' | 'toon' | 'neon';
 
@@ -99,4 +99,8 @@ export const DEFAULT_LOOK_ID: LookId = 'default';
 /** Own-property lookup so ids like `__proto__` or `constructor` fall back instead of resolving. */
 export function lookById(id: string | null | undefined): Look {
   return id != null && Object.hasOwn(LOOKS, id) ? LOOKS[id as LookId] : LOOKS[DEFAULT_LOOK_ID];
+}
+
+export function shadeOf(l: Look): FaceShade {
+  return { skinGray: l.skinGray, lipGray: l.lipGray, skinTint: l.tint.skin, lipTint: l.tint.lip, cavity: l.cavity };
 }
