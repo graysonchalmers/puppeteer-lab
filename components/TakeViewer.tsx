@@ -11,6 +11,7 @@ import { fetchTake, expiresLabel } from './shared/takeApi';
 import { takeShape, TakeShape } from './shared/takeShape';
 import { findFrameIndex } from '../hooks/useRecorder';
 import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
+import type { MeshDetail } from './face/faceGeometry';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import PlaybackOptions from './PlaybackOptions';
 import { useCleanedFrames, useCleanupPrefs } from '../hooks/useCleanedFrames';
@@ -89,6 +90,8 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     let raf = 0;
+    // Harness-only (scripts/looks-sheet.mjs): ?mesh=full renders the dense mesh. Unknown values mean the default.
+    const meshDetail: MeshDetail = new URLSearchParams(window.location.search).get('mesh') === 'full' ? 'full' : 'low';
     const draw = () => {
       const parent = canvas.parentElement;
       if (parent && (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight)) {
@@ -109,7 +112,7 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
       const orbiting = orbitOnRef.current;
       drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current, handR: orbiting ? depthRef.current.handR[idx] : undefined }, canvas.width, canvas.height, {
         showGazeRays: false, showMocapDots: false, videoAspect: take.aspect,
-        browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 35, meshDetail: 'low',
+        browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 35, meshDetail,
         view: orbiting ? { ...orbitViewRef.current, pivot: depthRef.current.pivot } : null,
       });
       raf = requestAnimationFrame(draw);

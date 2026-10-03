@@ -59,7 +59,7 @@ export async function startPreview(port) {
 }
 
 /** Serve `take` (a parsed recording) as the shared take, then open the viewer paused at t=0. */
-export async function openViewer(page, base, take) {
+export async function openViewer(page, base, take, query = '') {
   await page.route('**/api/takes/*', (route) =>
     route.fulfill({
       status: 200,
@@ -68,7 +68,7 @@ export async function openViewer(page, base, take) {
       body: JSON.stringify(take),
     }),
   );
-  await page.goto(`${base}/t/${TAKE_ID}`);
+  await page.goto(`${base}/t/${TAKE_ID}${query}`);
   await page.getByTestId('take-canvas').waitFor({ timeout: 15000 });
   await page.waitForTimeout(400);
 }
