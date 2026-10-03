@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Face Puppet geometry in scene units (see projection.ts): non-indexed
- * positions, crease-angle normals (live face normals summed over the neutral
- * smoothing groups) and per-corner gray. Writes into preallocated arrays; no
- * per-frame allocation. PuppetScene uploads these to a BufferGeometry.
+ * positions, per-corner color (gray x tint x cavity), OUTWARD live face normals
+ * (faceNormals, never flipped toward the camera) and crease-angle smoothed
+ * normals stored INWARD (normals: the negated, normalized sum of faceNormals over
+ * the neutral smoothing groups, which is what the shader needs because the
+ * mirrored mesh is drawn back-facing). Writes into preallocated arrays; no
+ * per-frame allocation. PuppetScene uploads these to a BufferGeometry as-is.
  */
 import { Landmark } from '../shared/trackerTypes';
 import { Projection } from './projection';
@@ -27,7 +30,7 @@ export interface FaceBuffers {
   positions: Float32Array;
   normals: Float32Array;
   colors: Float32Array;
-  /** Scratch: live face normal per triangle (unnormalized, area-weighted). */
+  /** Live OUTWARD face normal per triangle (unnormalized, area-weighted), at every pose. */
   faceNormals: Float32Array;
 }
 
@@ -72,10 +75,11 @@ export function updateFaceBuffers(buf: FaceBuffers, detail: MeshDetail, lm: Land
     const a = t * 9;
     const ux = P[a + 3] - P[a], uy = P[a + 4] - P[a + 1], uz = P[a + 5] - P[a + 2];
     const vx = P[a + 6] - P[a], vy = P[a + 7] - P[a + 1], vz = P[a + 8] - P[a + 2];
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    // Two-sided: the X mirror flips winding, so orient every face toward the camera.
-    if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
-    FN[t * 3] = nx; FN[t * 3 + 1] = ny; FN[t * 3 + 2] = nz;
+    const wx = uy * vz - uz * vy, wy = uz * vx - ux * vz, wz = ux * vy - uy * vx;
+    // The X mirror reverses every triangle's winding and the tables are consistently wound, so -w is the outward
+    // normal of every triangle at every pose. Do not flip it toward the camera: triangles that fold when the head
+    // turns must keep facing away from the head, or they are lit inside-out.
+    FN[t * 3] = -wx; FN[t * 3 + 1] = -wy; FN[t * 3 + 2] = -wz;
   }
   const N = buf.normals;
   for (let c = 0; c < nTris * 3; c++) {
@@ -85,6 +89,8 @@ export function updateFaceBuffers(buf: FaceBuffers, detail: MeshDetail, lm: Land
       x += FN[u * 3]; y += FN[u * 3 + 1]; z += FN[u * 3 + 2];
     }
     const m = Math.hypot(x, y, z) || 1;
-    N[c * 3] = x / m; N[c * 3 + 1] = y / m; N[c * 3 + 2] = z / m;
+    // Stored NEGATED (inward): three flips the stored normal of a back-facing triangle and the mirrored mesh is drawn
+    // back-facing, so the shader turns this inward normal back into the outward one.
+    N[c * 3] = -x / m; N[c * 3 + 1] = -y / m; N[c * 3 + 2] = -z / m;
   }
 }

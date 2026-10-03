@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOOK, shadeOf } from './looks';
+import { STAGE_BG } from './FaceMeshRenderer';
 
 const isColor = (c: number) => Number.isInteger(c) && c >= 0 && c <= 0xffffff;
 
@@ -16,6 +17,10 @@ describe('look', () => {
       ],
       handColor: 0x9aa0c0,
     });
+  });
+
+  it('background equals the stage container color, so the canvas edge shows no seam', () => {
+    expect(LOOK.background).toBe(parseInt(STAGE_BG.slice(1), 16));
   });
 
   it('has in-range values', () => {

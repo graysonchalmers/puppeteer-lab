@@ -7,7 +7,7 @@
  * either side behind the head, a faint cool fill, strong baked cavity darkening, near-black background. Colors are
  * 0xRRGGBB; light positions are in the rig's camera-locked frame (+x right, +y up, +z toward the viewer).
  */
-import { FaceShade } from './faceGeometry';
+import type { FaceShade } from './faceGeometry';
 
 export interface LightSpec { color: number; intensity: number; pos: [number, number, number] }
 
@@ -23,7 +23,7 @@ export interface Look {
   tint: { skin: number; lip: number };
   ambient: { color: number; intensity: number };
   lights: LightSpec[];
-  /** sRGB of skinGray * tint, so the hands match the face. */
+  /** sRGB of the hand color: tuned brighter than the face (skinGray * tint) for phone-size legibility. */
   handColor: number;
 }
 

@@ -251,12 +251,6 @@ export class PuppetScene {
     if (face) {
       this.ensureFace(input.meshDetail, input.creaseAngle);
       updateFaceBuffers(this.faceBuf, input.meshDetail, face, p, this.crease.groups!);
-      // The mirrored face winds back-facing, and three's double-sided shading flips a back face's normal, so the
-      // outward normals we compute would be lit as if every light came from the opposite side (the hands are not
-      // mirrored and never were). Store the inward normals; the shader's flip turns them back into outward ones, so
-      // face and hands share the same light directions and the specular lands where it should.
-      const N = this.faceBuf.normals;
-      for (let i = 0; i < N.length; i++) N[i] = -N[i];
       const g = this.faceMesh.geometry;
       g.getAttribute('position').needsUpdate = true;
       g.getAttribute('normal').needsUpdate = true;
