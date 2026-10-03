@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Playback options under the stage: the Clean up switch with its strength slider and gap badge.
+ * Playback options under the stage: the Clean up switch with its strength slider and gap badge, and the Orbit switch.
  */
 import React from 'react';
 import { CleanReport } from './shared/cleanTake';
@@ -16,11 +16,12 @@ export interface PlaybackOptionsProps {
     onEnabled(v: boolean): void;
     onStrength(v: number): void;
   };
+  orbit?: { enabled: boolean; disabled?: boolean; onEnabled(v: boolean): void; onReset(): void };
   disabled?: boolean;
   className?: string;
 }
 
-const PlaybackOptions: React.FC<PlaybackOptionsProps> = ({ cleanup, disabled, className = '' }) => (
+const PlaybackOptions: React.FC<PlaybackOptionsProps> = ({ cleanup, orbit, disabled, className = '' }) => (
   <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11px] text-gray-300 ${className}`}>
     <button
       data-testid="cleanup-toggle"
@@ -50,6 +51,31 @@ const PlaybackOptions: React.FC<PlaybackOptionsProps> = ({ cleanup, disabled, cl
         <span data-testid="cleanup-badge" className="text-gray-400">
           {reportLabel(cleanup.report)}
         </span>
+      </>
+    )}
+    {orbit && (
+      <>
+        <button
+          data-testid="orbit-toggle"
+          role="switch"
+          aria-checked={orbit.enabled}
+          disabled={orbit.disabled}
+          onClick={() => orbit.onEnabled(!orbit.enabled)}
+          className={`min-h-[44px] md:min-h-0 px-3 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            orbit.enabled ? 'bg-white/15 text-white font-semibold' : 'bg-white/10 text-gray-300 hover:text-white'
+          }`}
+        >
+          ORBIT {orbit.enabled ? 'ON' : 'OFF'}
+        </button>
+        {orbit.enabled && (
+          <button
+            data-testid="orbit-reset"
+            onClick={orbit.onReset}
+            className="min-h-[44px] md:min-h-0 px-3 py-1 rounded-lg bg-white/10 text-gray-300 hover:text-white"
+          >
+            RESET VIEW
+          </button>
+        )}
       </>
     )}
   </div>

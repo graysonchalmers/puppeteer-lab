@@ -23,6 +23,9 @@ import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder, findFrameIndex } from '../hooks/useRecorder';
 import PlaybackOptions from './PlaybackOptions';
 import { useCleanedFrames, useCleanupPrefs } from '../hooks/useCleanedFrames';
+import { FRONT_VIEW, OrbitView } from './face/orbitState';
+import { useOrbitInput } from '../hooks/useOrbitInput';
+import { useTakeDepth } from '../hooks/useTakeDepth';
 import RecorderControls from './RecorderControls';
 import SaveLink from './SaveLink';
 import { useSaveLink } from '../hooks/useSaveLink';
@@ -103,6 +106,18 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   );
   const playFramesRef = useRef<FrameData[]>([]);
   playFramesRef.current = cleaned.frames; // read by the render loop, whose effect does not re-run on a toggle
+
+  // Orbit is a playback-only camera: live view, exports and the upload never see it.
+  const [orbitOn, setOrbitOn] = useState(false);
+  const orbitViewRef = useRef<OrbitView>(FRONT_VIEW);
+  const orbitOnRef = useRef(false);
+  orbitOnRef.current = orbitOn;
+  useOrbitInput(canvasRef, orbitOn && recorder.isPlaying, orbitViewRef);
+  const depthAspect = (() => { const s = recorder.getVideoSize(); return s ? s.width / s.height : 4 / 3; })();
+  const depth = useTakeDepth(cleaned.frames, depthAspect, orbitOn && recorder.isPlaying);
+  const depthRef = useRef(depth);
+  depthRef.current = depth;
+  useEffect(() => { if (!recorder.isPlaying) orbitViewRef.current = FRONT_VIEW; }, [recorder.isPlaying]);
 
   // Save & get link state lives here, not in SaveLink: rotating a phone remounts the recorder panel (drawer <-> desktop).
   const saveLink = useSaveLink(() => recorder.buildRecordingBlob('full'), `${recorder.frameCount}:${recorder.durationMs}`);
@@ -188,6 +203,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
               let currentLandmarks: Landmark[] | undefined;
               let currentBlendshapesRecord: Record<string, number> = {};
               let currentHands: Landmark[][] = [];
+              let playIdx = -1;
 
               if (exportFrameRef.current) {
                   currentLandmarks = exportFrameRef.current.faceLandmarks;
@@ -198,7 +214,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
               else if (recorder.isPlaying) {
                   const rawFrame = recorder.getPlaybackFrame(); // also advances the loop and the clock
                   const pf = playFramesRef.current;
-                  const frame = pf.length > 0 ? pf[findFrameIndex(pf, recorder.getPlaybackTimeMs())] : rawFrame;
+                  playIdx = pf.length > 0 ? findFrameIndex(pf, recorder.getPlaybackTimeMs()) : -1;
+                  const frame = playIdx >= 0 ? pf[playIdx] : rawFrame;
                   if (frame) {
                       currentLandmarks = frame.faceLandmarks;
                       currentBlendshapesRecord = frame.blendshapes || {};
@@ -256,7 +273,8 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
               puppetStateRef.current = stepPuppetState(puppetStateRef.current, currentLandmarks, currentBlendshapesRecord, aspect, blinkBoost);
 
               // Render Stylized Puppet Character
-              drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, state: puppetStateRef.current }, w, h, {
+              const orbiting = orbitOnRef.current && recorder.isPlaying && !exportFrameRef.current;
+              drawPuppet(ctx, { face: currentLandmarks ?? null, hands: currentHands, state: puppetStateRef.current, handR: orbiting && playIdx >= 0 ? depthRef.current.handR[playIdx] : undefined }, w, h, {
                   showGazeRays,
                   showMocapDots,
                   videoAspect: aspect,
@@ -265,6 +283,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
                   blinkBoost,
                   creaseAngle,
                   meshDetail,
+                  view: orbiting ? { ...orbitViewRef.current, pivot: depthRef.current.pivot } : null,
               });
               // Live view only: a hands-only playback/export frame should look
               // the same on stage as it does in the exported video.
@@ -426,6 +445,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
             report: cleaned.report,
             onEnabled: (enabled) => setCleanupPrefs({ enabled }),
             onStrength: (strength) => setCleanupPrefs({ strength }),
+          }}
+          orbit={{
+            enabled: orbitOn,
+            disabled: !recorder.hasData || recorder.isRecording || exportState !== null,
+            onEnabled: (on) => { orbitViewRef.current = FRONT_VIEW; setOrbitOn(on); },
+            onReset: () => { orbitViewRef.current = FRONT_VIEW; },
           }}
           disabled={!recorder.hasData || exportState !== null || recorder.isRecording}
         />

@@ -14,6 +14,9 @@ import { drawPuppet, disposePuppet } from './face/FaceMeshRenderer';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import PlaybackOptions from './PlaybackOptions';
 import { useCleanedFrames, useCleanupPrefs } from '../hooks/useCleanedFrames';
+import { FRONT_VIEW, OrbitView } from './face/orbitState';
+import { useOrbitInput } from '../hooks/useOrbitInput';
+import { useTakeDepth } from '../hooks/useTakeDepth';
 
 type Loaded = TakeShape & { audioUrl: string | null; expiresAt: number | null };
 type View = { kind: 'loading' } | { kind: 'expired' } | { kind: 'not-found' } | { kind: 'error' } | { kind: 'ready'; take: Loaded };
@@ -55,6 +58,14 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
   const cleaned = useCleanedFrames(take.frames, '', prefs.enabled, prefs.strength);
   const framesRef = useRef(take.frames);
   framesRef.current = cleaned.frames; // read by the draw loop, which does not re-run when the switch flips
+  const [orbitOn, setOrbitOn] = useState(false);
+  const orbitViewRef = useRef<OrbitView>(FRONT_VIEW);
+  const orbitOnRef = useRef(false);
+  orbitOnRef.current = orbitOn;
+  useOrbitInput(canvasRef, orbitOn, orbitViewRef);
+  const depth = useTakeDepth(cleaned.frames, take.aspect, orbitOn);
+  const depthRef = useRef(depth);
+  depthRef.current = depth;
   const [playing, setPlaying] = useState(false);
   const [clockMs, setClockMs] = useState(0);
   const [nowWall, setNowWall] = useState(() => Date.now());
@@ -92,11 +103,14 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
         if (a) { a.currentTime = 0; a.play().catch(() => {}); }
       }
       const frames = framesRef.current;
-      const frame = frames[findFrameIndex(frames, t)];
+      const idx = findFrameIndex(frames, t);
+      const frame = frames[idx];
       stateRef.current = stepPuppetState(stateRef.current, frame.faceLandmarks, frame.blendshapes || {}, take.aspect, 0.5);
-      drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current }, canvas.width, canvas.height, {
+      const orbiting = orbitOnRef.current;
+      drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current, handR: orbiting ? depthRef.current.handR[idx] : undefined }, canvas.width, canvas.height, {
         showGazeRays: false, showMocapDots: false, videoAspect: take.aspect,
         browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 35, meshDetail: 'low',
+        view: orbiting ? { ...orbitViewRef.current, pivot: depthRef.current.pivot } : null,
       });
       raf = requestAnimationFrame(draw);
     };
@@ -167,6 +181,11 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
               report: cleaned.report,
               onEnabled: (enabled) => setPrefs({ enabled }),
               onStrength: (strength) => setPrefs({ strength }),
+            }}
+            orbit={{
+              enabled: orbitOn,
+              onEnabled: (on) => { orbitViewRef.current = FRONT_VIEW; setOrbitOn(on); },
+              onReset: () => { orbitViewRef.current = FRONT_VIEW; },
             }}
           />
           <a
