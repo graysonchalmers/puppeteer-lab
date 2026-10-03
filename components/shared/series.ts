@@ -42,13 +42,14 @@ export function medianDt(timestamps: number[]): number {
  * Fills gaps in place. A gap is a run of absent samples with a present sample on both sides; it is filled only when
  * the time between those two samples is at most `maxGapMs`. Landmarks use cubic Hermite with one-sided neighbour
  * slopes (secant when a neighbour is absent); `linear` interpolates straight. Leading and trailing absence is
- * never filled (no extrapolation).
+ * never filled (no extrapolation). `onGap(i0, i1, filled)` is called once per interior gap (the bracketing present
+ * slots and whether it was filled); it does not change what is filled or the returned stats.
  */
 export function fillGaps(
   ch: Channel,
   dtMs: number,
   maxGapMs: number,
-  opts: { linear?: boolean; clamp01?: boolean } = {},
+  opts: { linear?: boolean; clamp01?: boolean; onGap?: (i0: number, i1: number, filled: boolean) => void } = {},
 ): GapStats {
   const { data, present, n, dim } = ch;
   const stats: GapStats = { filled: 0, left: 0, filledSamples: 0 };
@@ -67,6 +68,7 @@ export function fillGaps(
     const span = i1 - i0;
     if (span * dtMs > maxGapMs) {
       stats.left++;
+      opts.onGap?.(i0, i1, false);
       continue;
     }
     const hasPrev = i0 >= 1 && present[i0 - 1] === 1;
@@ -97,6 +99,7 @@ export function fillGaps(
     for (let k = 1; k < span; k++) present[i0 + k] = 1;
     stats.filled++;
     stats.filledSamples += span - 1;
+    opts.onGap?.(i0, i1, true);
   }
   return stats;
 }

@@ -227,3 +227,109 @@ describe('cleanTake: resampling', () => {
     expect(frames[58].faceLandmarks![0].x).toBeCloseTo(0.95, 9); // the clamped, later frame wins slot 58
   });
 });
+
+describe('cleanTake: gap report counts real dropouts, not resampling holes', () => {
+  // A real 60 fps clock: intervals are whole milliseconds, so the median interval differs from the true mean and source
+  // frames drift against the grid. 16,16,17 ms (median 16, mean 16.33) leaves a one-slot hole every ~48 frames;
+  // 17,17,16 ms (median 17, mean 16.67) makes frames share slots instead. Neither is a dropout.
+  const clock = (n: number, pattern: number[]): number[] => {
+    const ts = [0];
+    for (let i = 1; i < n; i++) ts.push(ts[i - 1] + pattern[(i - 1) % pattern.length]);
+    return ts;
+  };
+  const PATTERNS: [string, number[]][] = [
+    ['16,16,17 (holes)', [16, 16, 17]],
+    ['17,17,16 (collisions)', [17, 17, 16]],
+  ];
+  const medianInterval = (pattern: number[]) => [...pattern].sort((a, b) => a - b)[pattern.length >> 1];
+  const build = (pattern: number[], drop?: { from: number; count: number; keepFrames: boolean }): FrameData[] => {
+    const ts = clock(600, pattern);
+    const out: FrameData[] = [];
+    ts.forEach((t, i) => {
+      const dropped = drop && i >= drop.from && i < drop.from + drop.count;
+      if (dropped && !drop!.keepFrames) return; // frame missing from the array entirely
+      out.push(dropped ? { timestamp: t } : { timestamp: t, faceLandmarks: face(faceX(i)), landmarks: [hand(0.8)] });
+    });
+    return out;
+  };
+  const gridSize = (src: FrameData[], pattern: number[]) =>
+    Math.floor((src[src.length - 1].timestamp - src[0].timestamp) / medianInterval(pattern) + 1e-6) + 1;
+
+  it.each(PATTERNS)('reports nothing on a clean 1 ms-quantized timeline: %s', (_name, pattern) => {
+    const src = build(pattern);
+    const { frames, report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsFilled).toBe(0);
+    expect(report.gapsLeft).toBe(0);
+    expect(report.filledMs).toBe(0);
+    expect(frames).toHaveLength(gridSize(src, pattern));
+  });
+
+  it.each(PATTERNS)('rounding holes are still filled in the output, only not reported: %s', (_name, pattern) => {
+    const { frames } = cleanTake(build(pattern), { strength: 0 });
+    expect(frames.every((f) => f.faceLandmarks && f.landmarks)).toBe(true);
+  });
+
+  it.each([
+    ['frames present but empty', true],
+    ['frames missing from the array', false],
+  ])('one ~100 ms dropout of every channel is one filled event, not one per channel: %s', (_name, keepFrames) => {
+    const pattern = [16, 16, 17];
+    const src = build(pattern, { from: 300, count: 6, keepFrames });
+    const { report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsFilled).toBe(1);
+    expect(report.gapsLeft).toBe(0);
+    // six absent frames at ~16.3 ms: the missing time is ~98 ms
+    expect(Math.abs(report.filledMs - 100)).toBeLessThanOrEqual(medianInterval(pattern));
+  });
+
+  it('a 400 ms dropout is one event left unfilled', () => {
+    const src = build([16, 16, 17], { from: 300, count: 25, keepFrames: true });
+    const { frames, report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsLeft).toBe(1);
+    expect(report.gapsFilled).toBe(0);
+    expect(report.filledMs).toBe(0);
+    expect(frames[310].faceLandmarks).toBeUndefined();
+  });
+
+  it('a filled dropout and a too-long one are two separate events', () => {
+    const ts = clock(600, [16, 16, 17]);
+    const src: FrameData[] = ts.map((t, i) =>
+      (i >= 100 && i < 106) || (i >= 300 && i < 325) ? { timestamp: t } : { timestamp: t, faceLandmarks: face(faceX(i)) },
+    );
+    const { report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsFilled).toBe(1);
+    expect(report.gapsLeft).toBe(1);
+  });
+
+  it('an event is left unless every overlapping channel gap was filled', () => {
+    // face absent 150 ms (fillable), the hand absent over a longer, overlapping 400 ms (not fillable): one event, left
+    const ts = clock(600, [16, 16, 17]);
+    const src: FrameData[] = ts.map((t, i) => ({
+      timestamp: t,
+      ...(i >= 300 && i < 309 ? {} : { faceLandmarks: face(faceX(i)) }),
+      ...(i >= 298 && i < 323 ? {} : { landmarks: [hand(0.8)] }),
+    }));
+    const { report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsLeft).toBe(1);
+    expect(report.gapsFilled).toBe(0);
+  });
+
+  it('a single lost frame (interval ~2 x dt) is still reported', () => {
+    const src = build([16, 16, 17]).filter((_, i) => i !== 300);
+    const { report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsFilled).toBe(1);
+    expect(report.gapsLeft).toBe(0);
+    expect(Math.abs(report.filledMs - 16)).toBeLessThanOrEqual(16);
+  });
+
+  it('one frame arriving late (1.6 x dt interval) over a rounding hole is jitter, not a dropout', () => {
+    // frame 300 is delayed 10 ms and now shares a slot with frame 301. The hole it leaves is bracketed by frames
+    // 299 and 300 (26 ms, 1.6 x dt), not by the surviving frames 299 and 301 (32 ms, 2 x dt).
+    const ts = clock(600, [16, 16, 17]);
+    ts[300] += 10;
+    const src: FrameData[] = ts.map((t, i) => ({ timestamp: t, faceLandmarks: face(faceX(i)), landmarks: [hand(0.8)] }));
+    const { report } = cleanTake(src, { strength: 0 });
+    expect(report.gapsFilled).toBe(0);
+    expect(report.gapsLeft).toBe(0);
+  });
+});

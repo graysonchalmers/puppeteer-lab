@@ -55,6 +55,18 @@ describe('fillGaps', () => {
     expect(ch.present[5]).toBe(0);
   });
 
+  it('calls onGap once per interior gap, filled or left, and leaves the stats unchanged', () => {
+    const calls: [number, number, boolean][] = [];
+    const values: (number | null)[] = [null, 0, 1, null, null, 4, 5, ...Array(20).fill(null), 26, 27, null];
+    const ch = chan(values);
+    const s = fillGaps(ch, DT, 300, { onGap: (a, b, f) => calls.push([a, b, f]) });
+    expect(calls).toEqual([
+      [2, 5, true],
+      [6, 27, false],
+    ]);
+    expect(s).toEqual({ filled: 1, left: 1, filledSamples: 2 });
+  });
+
   it('never fills leading or trailing absence', () => {
     const ch = chan([null, null, 3, 4, null, null]);
     const s = fillGaps(ch, DT, 300);
