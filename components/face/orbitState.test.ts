@@ -43,6 +43,13 @@ describe('zoom', () => {
     expect(zoomView(FRONT_VIEW, 1.5).zoom).toBe(1.5);
     expect(zoomView(FRONT_VIEW, 100).zoom).toBe(ZOOM_MAX);
     expect(zoomView(FRONT_VIEW, 0.001).zoom).toBe(ZOOM_MIN);
+    // Catch mutations: ensure we multiply, not assign or mutate incorrectly
+    expect(zoomView({ ...FRONT_VIEW, zoom: 1.5 }, 1.2).zoom).toBeCloseTo(1.8);
+    // Catch mutations that drop yaw/pitch
+    const result = zoomView({ yaw: 0.3, pitch: -0.2, zoom: 1 }, 1.1);
+    expect(result.yaw).toBe(0.3);
+    expect(result.pitch).toBe(-0.2);
+    expect(result.zoom).toBeCloseTo(1.1);
   });
   it('wheel up (negative deltaY) zooms in, down zooms out, and a huge delta stays finite', () => {
     expect(wheelFactor(-100)).toBeLessThan(1);
