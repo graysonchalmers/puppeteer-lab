@@ -30,7 +30,7 @@
 1. **Memoization lives in the hook** (`useMemo` keyed on frames identity, a version string, enabled and strength), not in a `WeakMap` inside `cleanTake`. The recorder's buffer array is mutated in place while recording, so an identity-keyed cache inside the pure function would go stale.
 2. **Orbit front pose = the capture camera**, not a fixed 35 degree FOV: perspective camera at distance `f` from the face plane with `fovY = 2*atan((stageH/2)/f)`. The spec's invariant (hands reproject to their captured position) only holds for that pose, and it supersedes the approximate 35 degree figure.
 3. **Orbit browser gate lives in a new `scripts/orbit-check.mjs`** (Chromium desktop, plus a WebKit iPhone drag section), not inside `phone-check.mjs`. `phone-check` needs a live camera flow and is RAM-flaky; the viewer with a mocked `/api/takes/<id>` is deterministic.
-4. **Length cap:** a take whose resampled grid would exceed `MAX_GRID_SLOTS = 12000` samples (200 s at 60 fps) is returned unchanged with `report.skipped = true`, and the UI says "Take too long to clean up". The spec only flagged memory as a risk; this bounds it.
+4. **Length cap:** a take whose resampled grid would exceed `MAX_GRID_SLOTS = 6000` samples (100 s at 60 fps) is returned unchanged with `report.skipped = true`, and the UI says "Take too long to clean up". The spec only flagged memory as a risk; this bounds it.
 5. **A total dropout longer than 300 ms** becomes an empty frame (no face, no hands) under cleanup, instead of the raw take's freeze on the last frame. The raw view (switch off) still shows the freeze.
 
 ## Review Focus
@@ -550,7 +550,7 @@ git commit -m "feat(cleanup): hand identity tracking for saved takes" -m "Co-Aut
 **Interfaces:**
 - Consumes: `FrameData` (`types.ts`); `trackHands` (Task 2); `makeChannel`, `fillGaps`, `smoothZeroPhase`, `medianDt`, `Channel`, `GapStats` (Task 1); `FACE_ONE_EURO_DEFAULTS`, `faceSmoothingToMinCutoff` (`components/shared/oneEuro.ts`).
 - Produces:
-  - `DEFAULT_MAX_GAP_MS = 300`, `MAX_GRID_SLOTS = 12000`
+  - `DEFAULT_MAX_GAP_MS = 300`, `MAX_GRID_SLOTS = 6000`
   - `interface CleanOptions { strength: number; maxGapMs?: number }`
   - `interface CleanReport { gapsFilled: number; gapsLeft: number; filledMs: number; skipped?: boolean }`
   - `interface CleanResult { frames: FrameData[]; report: CleanReport }`
@@ -768,8 +768,9 @@ import { trackHands } from './handTracks';
 import { Channel, GapStats, fillGaps, makeChannel, medianDt, smoothZeroPhase } from './series';
 
 export const DEFAULT_MAX_GAP_MS = 300;
-/** 200 s at 60 fps. Beyond this the cleaned copy gets too heavy for a phone tab: the take is returned unchanged. */
-export const MAX_GRID_SLOTS = 12000;
+/** 100 s at 60 fps. At 6000 slots a 478-point face is a ~69 MB channel plus ~2.9M output point objects (roughly 100-150 MB
+ * together, beside the raw take). Beyond this the cleaned copy is too heavy for a phone tab: the take is returned unchanged. */
+export const MAX_GRID_SLOTS = 6000;
 
 const HAND_POINTS = 21;
 /** A wrist moving this far (normalized units) in one sample is a re-detection, not motion: never smooth across it. */
@@ -2646,7 +2647,7 @@ Add to `package.json` scripts: `"orbit-check": "npm run build && node scripts/or
 
 - [ ] **Step 2: Write the doc**
 
-Create `docs/TAKE_CLEANUP_AND_ORBIT.md` (short, user-facing): what **Clean up** does (resample, fill gaps up to 300 ms, zero-phase smoothing; off by default, raw never changed, exports and share links stay raw, limits: 200 s cap, a gap over 300 ms stays empty, and the baked-in lag from live filtering is not removed), what **Orbit** does (drag, wheel/pinch, double-tap or Reset; yaw ±75°, pitch ±40°, zoom 0.5x to 2x; only the front of the head was captured), and the accuracy caveat verbatim: hand depth is estimated from apparent size (face width 14.5 cm, hand wrist-to-knuckle 9.5 cm) so it is a plausible 3D view, roughly ±20 to 30 percent, not metric. Link the spec and this plan.
+Create `docs/TAKE_CLEANUP_AND_ORBIT.md` (short, user-facing): what **Clean up** does (resample, fill gaps up to 300 ms, zero-phase smoothing; off by default, raw never changed, exports and share links stay raw, limits: 100 s cap, a gap over 300 ms stays empty, and the baked-in lag from live filtering is not removed), what **Orbit** does (drag, wheel/pinch, double-tap or Reset; yaw ±75°, pitch ±40°, zoom 0.5x to 2x; only the front of the head was captured), and the accuracy caveat verbatim: hand depth is estimated from apparent size (face width 14.5 cm, hand wrist-to-knuckle 9.5 cm) so it is a plausible 3D view, roughly ±20 to 30 percent, not metric. Link the spec and this plan.
 
 - [ ] **Step 3: Run the full gates**
 

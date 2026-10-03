@@ -12,8 +12,9 @@ import { trackHands } from './handTracks';
 import { Channel, GapStats, fillGaps, makeChannel, medianDt, smoothZeroPhase } from './series';
 
 export const DEFAULT_MAX_GAP_MS = 300;
-/** 200 s at 60 fps. Beyond this the cleaned copy gets too heavy for a phone tab: the take is returned unchanged. */
-export const MAX_GRID_SLOTS = 12000;
+/** 100 s at 60 fps. At 6000 slots a 478-point face is a ~69 MB channel plus ~2.9M output point objects (roughly 100-150 MB
+ * together, beside the raw take). Beyond this the cleaned copy is too heavy for a phone tab: the take is returned unchanged. */
+export const MAX_GRID_SLOTS = 6000;
 
 const HAND_POINTS = 21;
 /** A wrist moving this far (normalized units) in one sample is a re-detection, not motion: never smooth across it. */

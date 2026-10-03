@@ -169,12 +169,61 @@ describe('cleanTake: smoothing', () => {
 });
 
 describe('cleanTake: size', () => {
-  it('cleans 1200 frames of a 478-point face in a few seconds', () => {
+  it('cleans 400 frames of a 478-point face in a few seconds', () => {
+    // Kept deliberately light: a heavier run in a parallel worker contends with the 100 ms timing gate in
+    // recordingSchema.test.ts and made it fail intermittently (it passed alone). 4000 ms is a generous bound.
     const big = Array.from({ length: 478 }, (_, k) => ({ x: (k % 50) / 50, y: Math.floor(k / 50) / 10, z: 0 }));
-    const src = take(1200, (i) => ({ faceLandmarks: big.map((p) => ({ x: p.x + 0.001 * Math.sin(i / 10), y: p.y, z: p.z })), landmarks: [hand(0.5)] }));
+    const src = take(400, (i) => ({ faceLandmarks: big.map((p) => ({ x: p.x + 0.001 * Math.sin(i / 10), y: p.y, z: p.z })), landmarks: [hand(0.5)] }));
     const t0 = performance.now();
     const r = cleanTake(src, { strength: 0.5 });
-    expect(performance.now() - t0).toBeLessThan(8000);
-    expect(r.frames).toHaveLength(1200);
+    expect(performance.now() - t0).toBeLessThan(4000);
+    expect(r.frames).toHaveLength(400);
+  });
+});
+
+describe('cleanTake: resampling', () => {
+  // Source frame i carries x = faceX(i), so the value in an output slot says which source frame landed there.
+  const withTimestamps = (ts: number[]): FrameData[] => ts.map((t, i) => ({ timestamp: t, faceLandmarks: face(faceX(i)) }));
+
+  it('puts jittered timestamps in the nearest slot (round, not floor)', () => {
+    // frames 1, 4, 7, 10 sit 1 ms early or late; the median interval is still 20 ms
+    const jitter: Record<number, number> = { 1: -1, 4: 1, 7: -1, 10: 1 };
+    const src = withTimestamps(Array.from({ length: 40 }, (_, i) => i * DT + (jitter[i] ?? 0)));
+    const { frames } = cleanTake(src, { strength: 0 });
+    expect(frames).toHaveLength(40);
+    // floor() would send frame 1 (19 ms) to slot 0 and leave slot 1 to be interpolated
+    for (let i = 0; i < 40; i++) expect(frames[i].faceLandmarks![0].x).toBeCloseTo(faceX(i), 6);
+  });
+
+  it('lets the later of two frames in one slot win and drops the earlier one', () => {
+    const ts = Array.from({ length: 40 }, (_, i) => i * DT);
+    ts.splice(16, 0, 15 * DT + 1); // extra frame at 301 ms, rounds to slot 15 like the frame at 300 ms
+    const src = withTimestamps(ts);
+    src[16] = { timestamp: ts[16], faceLandmarks: face(0.9) };
+    const { frames } = cleanTake(src, { strength: 0 });
+    expect(frames).toHaveLength(40);
+    expect(frames[15].faceLandmarks![0].x).toBeCloseTo(0.9, 9);
+    expect(frames[15].faceLandmarks![0].x).not.toBeCloseTo(faceX(15), 6);
+    expect(frames[14].faceLandmarks![0].x).toBeCloseTo(faceX(14), 6);
+  });
+
+  it('keeps the last slot when the span is a hair under a whole number of intervals', () => {
+    const ts = Array.from({ length: 60 }, (_, i) => i * DT);
+    ts[59] = 59 * DT - 1e-7; // span / dt = 58.9999999995: floor() alone would drop the last slot
+    const src = withTimestamps(ts);
+    const { frames } = cleanTake(src, { strength: 0 });
+    expect(frames).toHaveLength(60);
+    expect(frames[59].faceLandmarks![0].x).toBeCloseTo(faceX(59), 6);
+  });
+
+  it('clamps a frame whose rounded slot is past the last one', () => {
+    // last frame at 58.6 intervals: K = 59 (slots 0..58) but round() gives slot 59
+    const ts = [...Array.from({ length: 59 }, (_, i) => i * DT), 58 * DT + 12];
+    const src = withTimestamps(ts);
+    src[59] = { timestamp: ts[59], faceLandmarks: face(0.95) };
+    const { frames } = cleanTake(src, { strength: 0 });
+    expect(frames).toHaveLength(59);
+    expect(frames[58].timestamp).toBe(58 * DT);
+    expect(frames[58].faceLandmarks![0].x).toBeCloseTo(0.95, 9); // the clamped, later frame wins slot 58
   });
 });
