@@ -52,6 +52,7 @@ export function fillGaps(
 ): GapStats {
   const { data, present, n, dim } = ch;
   const stats: GapStats = { filled: 0, left: 0, filledSamples: 0 };
+  if (!(dtMs > 0)) return stats; // unknown or invalid sample interval: the gap cap cannot be evaluated, fill nothing
   let i = 0;
   while (i < n) {
     if (present[i]) {
@@ -116,6 +117,7 @@ export function smoothZeroPhase(
   p: SmoothParams,
   opts: { breakBetween?: (prev: number, next: number) => boolean; clamp01?: boolean } = {},
 ): void {
+  if (!(dtMs > 0)) return; // unknown or invalid sample interval: leave the data untouched
   const { data, present, n, dim } = ch;
   const dt = dtMs / 1000;
   const x = new Float64Array(n);

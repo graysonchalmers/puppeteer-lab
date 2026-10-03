@@ -86,6 +86,14 @@ describe('fillGaps', () => {
     expect(ch.data[2 * 2]).toBeCloseTo(2);
     expect(ch.data[2 * 2 + 1]).toBeCloseTo(12);
   });
+
+  it.each([0, NaN, -20])('fills nothing and reports zero stats when dtMs is %s', (bad) => {
+    const ch = chan([0, 1, ...Array(20).fill(null), 22, 23]);
+    const s = fillGaps(ch, bad, 300);
+    expect(s).toEqual({ filled: 0, left: 0, filledSamples: 0 });
+    expect(ch.present[5]).toBe(0);
+    expect(ch.data[5]).toBe(0);
+  });
 });
 
 describe('smoothZeroPhase', () => {
@@ -146,13 +154,25 @@ describe('smoothZeroPhase', () => {
     expect(ch.data[9]).toBeGreaterThan(0.05);
   });
 
-  it('clamps to 0..1 when asked', () => {
-    const ch = chan([0, 0, 1, 1, 0, 0, 1, 1, 0, 0]);
+  it('clamps to 0..1 when asked, given out-of-range input', () => {
+    const input = [1.5, 1.5, 1.5, 1.5, -0.5, -0.5, -0.5, -0.5, 1.5, 1.5];
+    const control = chan(input);
+    smoothZeroPhase(control, DT, { minCutoff: 50, beta: 0 });
+    expect(Array.from(control.data).some((v) => v < 0 || v > 1)).toBe(true); // control: unclamped leaves [0,1]
+    const ch = chan(input);
     smoothZeroPhase(ch, DT, { minCutoff: 50, beta: 0 }, { clamp01: true });
     for (let i = 0; i < 10; i++) {
       expect(ch.data[i]).toBeGreaterThanOrEqual(0);
       expect(ch.data[i]).toBeLessThanOrEqual(1);
     }
+  });
+
+  it.each([0, NaN, -20])('is a no-op when dtMs is %s (no NaN written)', (bad) => {
+    const values = [1, 2, 3, 4, 5, 6];
+    const ch = chan(values);
+    smoothZeroPhase(ch, bad, { minCutoff: 3, beta: 0 });
+    expect(Array.from(ch.data)).toEqual(values);
+    expect(Array.from(ch.present)).toEqual(Array(6).fill(1));
   });
 
   it('leaves single-sample segments alone', () => {
