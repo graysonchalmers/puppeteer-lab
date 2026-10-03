@@ -14,6 +14,7 @@ import DemoSwitcher from './DemoSwitcher';
 import { StartCard, IssueCard, LostCard, MicNote } from './CameraPanels';
 import { AppMode } from '../types';
 import DebugReadout from './DebugReadout';
+import TrackerDebug from './TrackerDebug';
 import { pipDims } from './face/pipSize';
 import { createFpsMeter } from './shared/fpsMeter';
 import { Facing } from '../hooks/cameraSupport';
@@ -80,7 +81,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const askForMic = micWanted && !micBlocked;
 
   const {
-    frameRef, isReady: isCameraReady, retry, activeFacing, canFlip, delegate, statsRef,
+    frameRef, isReady: isCameraReady, retry, activeFacing, canFlip, delegate, statsRef, historyRef,
     status, cameraIssue, modelError, micStatus, audioStreamRef, enableMic, skipMic,
   } = useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing, enabled: started, audio: askForMic });
   const error = modelError; // camera problems have their own card (cameraIssue)
@@ -154,6 +155,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const renderFpsRef = useRef(0);
 
   const debug = useMemo(() => new URLSearchParams(window.location.search).has('debug'), []);
+  const [showDebug, setShowDebug] = useState<boolean>(debug); // the INPUT CAM stats overlay; ?debug starts it on
   const debugLine = useCallback(() => {
     const v = videoRef.current;
     return [
@@ -407,6 +409,13 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
              >
                  CAMERA PIP
              </button>
+             <button
+                 onClick={() => setShowDebug(!showDebug)}
+                 title="Live tracker numbers on the camera view: frame rates, hand and face model times, a graph of recent ticks"
+                 className={`min-h-[44px] px-3 md:min-h-0 md:px-2 md:py-0.5 rounded transition-colors ${showDebug ? 'bg-white/15 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
+             >
+                 DEBUG
+             </button>
          </div>
   );
 
@@ -526,6 +535,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
                       </button>
                   </div>
                   <canvas ref={pipCanvasRef} className="rounded bg-black block" width={pipInitRef.current.w} height={pipInitRef.current.h} />
+                  {showDebug && <TrackerDebug statsRef={statsRef} historyRef={historyRef} renderFpsRef={renderFpsRef} />}
               </div>
           )}
 

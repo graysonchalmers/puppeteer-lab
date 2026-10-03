@@ -33,6 +33,7 @@ import { createOneEuroBank, faceSmoothingToMinCutoff } from '../components/share
 import { updateAvgDt, nextFaceAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
 import { createFpsMeter } from '../components/shared/fpsMeter';
+import { createTrackerStats, createTickHistory, ema, TrackerStats } from '../components/shared/trackerStats';
 import { poke, registerTracker, holdAwake, useIdlePaused } from '../components/shared/idle';
 import { Facing, Delegate, resolveFacing, createWithDelegateFallback } from './cameraSupport';
 import {
@@ -105,7 +106,9 @@ export function useTracker(
   const modelsFailedRef = useRef(false);
   /** The microphone track wrapped in its own stream; null when there is none. The recorder reads this. */
   const audioStreamRef = useRef<MediaStream | null>(null);
-  const statsRef = useRef<{ trackFps: number; delegate: Delegate | null }>({ trackFps: 0, delegate: null });
+  const statsRef = useRef<TrackerStats>(createTrackerStats());
+  /** Recent ticks (duration, hands in view, face ran) for the debug overlay's graph. */
+  const historyRef = useRef(createTickHistory());
 
   useEffect(() => {
     if (options.smoothing !== undefined) {
@@ -184,6 +187,8 @@ export function useTracker(
     };
     let isActive = true;
     const meter = createFpsMeter();
+    const faceMeter = createFpsMeter();
+    statsRef.current = createTrackerStats(); // a fresh run starts from zero, but keeps writing into one object
 
     const closeAll = () => {
       handLandmarkerRef.current?.close();
@@ -526,8 +531,11 @@ export function useTracker(
         tickIndex++;
 
         try {
+          const t0 = performance.now();
           const handResult = handLm ? handLm.detectForVideo(video, now) : null;
+          const t1 = performance.now();
           const faceResult = runFace ? faceLm!.detectForVideo(video, now) : null;
+          const t2 = performance.now();
           const prev = frameRef.current;
           const next = buildFrame(prev, handResult, faceResult, now, {
             confidence: settingsRef.current.confidence,
@@ -536,7 +544,15 @@ export function useTracker(
           });
           if (faceLm && !runFace && prev) next.face = prev.face; // alternate tick: reuse
           frameRef.current = next;
-          statsRef.current.trackFps = meter.tick(now);
+          const st = statsRef.current;
+          st.trackFps = meter.tick(now);
+          if (handLm) st.handMs = ema(st.handMs, t1 - t0);
+          if (runFace) { st.faceMs = ema(st.faceMs, t2 - t1); st.faceFps = faceMeter.tick(now); }
+          st.tickMs = ema(st.tickMs, performance.now() - t0);
+          st.alternating = alternating;
+          st.hands = next.hands.length;
+          st.face = !!next.face;
+          historyRef.current.push({ ms: performance.now() - t0, hands: next.hands.length, faceRan: runFace });
           if (next.hands.length > 0) poke(); // playing with your hands is using the app
         } catch (e) {
           console.warn('Detection failed this frame', e);
@@ -576,7 +592,7 @@ export function useTracker(
 
   const error = cameraIssue ? issueSentence(cameraIssue) : modelError;
   return {
-    frameRef, isReady, error, retry, activeFacing, canFlip, delegate, statsRef, setSmoothing, setConfidence, setFaceSmoothing,
+    frameRef, isReady, error, retry, activeFacing, canFlip, delegate, statsRef, historyRef, setSmoothing, setConfidence, setFaceSmoothing,
     status, cameraIssue, modelError, micStatus, audioStreamRef, resumeCamera, enableMic, skipMic,
   };
 }
