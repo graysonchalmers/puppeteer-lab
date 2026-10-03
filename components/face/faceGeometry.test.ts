@@ -118,7 +118,7 @@ describe('face normal orientation', () => {
           }
           if (dot > 0) outward++;
         }
-        // Measured after the fix: 99.33% (low) and 98.57% (full) at every yaw; the ~1.4% left are concave triangles (nostrils,
+        // Measured after the fix: 99.33% (low) and 98.57% (full) at every yaw; the 0.67% (low) and 1.43% (full) left are concave triangles (nostrils,
         // eye sockets) the head-center heuristic calls inward. The old code scored 70-83% at yaw 45/60, so 97% still separates them.
         expect(outward / nTris).toBeGreaterThanOrEqual(0.97);
       });
