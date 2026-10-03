@@ -2,6 +2,8 @@
 
 Date: 2026-10-03. Status: approved in chat, spec for review.
 
+**Outcome (2026-10-03):** Grayson picked **neon**. It shipped as the single `LOOK` in `looks.ts`; the other candidates, the old default, `?look=`/`?mesh=`, the toon/outline/hemisphere code and the sheet script were deleted. The face now shades with outward normals unconditionally (see `handoff-log/2026-10-03-face-puppet-looks.md`).
+
 ## Intent
 Grayson wants a design pass on how the Face Puppet head and its scene lighting look, with a few distinct options to choose from. Success: four candidate looks rendered side by side, one chosen by Grayson, and that one shipped as the new default with the other three removed.
 
