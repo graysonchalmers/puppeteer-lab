@@ -1,15 +1,23 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-09-30 (CT)_
+_Last updated: 2026-10-03 (CT)_
 
 ## 🎯 Current state
 - **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com)): `main@4b06e56` (stamp `v0.0.0 🥝 ARREST · 4b06e5 · 2026-09-30`), deployed 2026-09-30: Face Puppet default load + permission flow, and the share-links backend **dark-launched** (container up, `/api/*` and `/t/*` routed, uploads OFF).
+- **Take cleanup + orbit camera built, NOT pushed or deployed** (22 local commits on `main` after `225ac42`; spec `docs/superpowers/specs/2026-10-02-take-cleanup-and-orbit-design.md`, plan `docs/superpowers/plans/2026-10-02-take-cleanup-and-orbit.md`, user doc `docs/TAKE_CLEANUP_AND_ORBIT.md`).
+  - **Clean up** switch (share viewer + Face Puppet playback): off by default, remembered per viewer; resamples the take, fills dropouts up to 300 ms, zero-phase smoothing; raw frames, exports and share upload stay raw. Takes over 100 s (`MAX_GRID_SLOTS = 6000`) are skipped. Badge counts dropout events in source time (1.75 x dt threshold, calibrated on a real take).
+  - **Orbit** switch: drag / wheel / pinch / double-tap or Reset; yaw +-75, pitch +-40, zoom 0.5-2; capture-pose perspective camera, hands placed by size-based depth (`handDepth.ts`, plausible not metric). Pitch sign deliberately `Euler(-pitch, yaw)`; pinned by `orbitCamera.test.ts`.
+  - **Gates:** typecheck clean, 427 tests, smoke, phone-check 97/97, share-check 28/28, and new `npm run cleanup-check` (7/7), `orbit-check` (11/11), `facedemo-check` (21/21). `recordingSchema.test.ts` "under 100ms" is a pre-existing load-sensitive flake: verify it alone.
 - **Share links v1** (merged to `main` and deployed, uploads off until `CONTACT_EMAIL` is set) (spec `docs/superpowers/specs/2026-09-30-share-links-design.md`, plan `docs/superpowers/plans/2026-09-30-share-links.md`, ops doc `docs/SHARE_LINKS.md`).
   - Face Puppet gets **Save & get link**: an explicit tap uploads the take (v3 recording JSON: face/hand motion + optional voice) to a small Node 22 server (`server/`, zero npm deps) and returns `/t/<id>`. The link page (`components/TakeViewer.tsx`) plays the take back, offers a JSON download, and shows the 24 h expiry. After 24 h the link says "expired"; the file stays in a private archive forever (never deleted by the app).
   - Caps: 50 MB per take (decompressed), 30 uploads per IP per day, ONE concurrent upload (`MAX_CONCURRENT_UPLOADS`, 503 `busy`), schema validation, storage quota, `mem_limit: 512m`. Uploads are refused (503) until `CONTACT_EMAIL` is set on the server, so the feature cannot go live without a real removal address.
   - Pull to this PC: `scripts/Pull-Takes.ps1` (admin token in `MOCAP_ADMIN_TOKEN`) into `data/takes/` (gitignored).
   - **Live state:** container `mocap-api-mocap-api-1` on apps-01 (`127.0.0.1:3017`, port 3016 was taken), data in `/home/grayson/mocap-data`, `.env.local` on the box holds generated `ADMIN_TOKEN` + `IP_SALT` and an EMPTY `CONTACT_EMAIL`, so `POST /api/takes` returns 503 `uploads-disabled`, `/api/config` says `uploadsEnabled:false` and the Save button stays hidden. Caddy backup `/etc/caddy/Caddyfile.bak-20260930092939`. Docker image built fine on the box (first ever build), 59 MiB idle.
 - **Gates at the last full run:** typecheck clean, 321+ tests, smoke OK, `npm run phone-check` 97/97 (flaky under low RAM: fixed-wait drawer/mic checks; passes on re-run), `npm run share-check` 28/28 (real server + vite preview, Chromium desktop flow, WebKit iPhone Save + rotation, pull script). The image now builds on apps-01. Live checks passed (health, config, 503, admin 401, `/t/<id>` viewer not-found state); the upload path itself has NOT been exercised live.
+
+## 🆕 Open after the cleanup/orbit build
+1. Push `main` and redeploy (Web-less: this app deploys to apps-01 per `deploy-live`), then check Clean up / Orbit on a real iPhone (touch drag, pinch, double-tap, `touch-action`, memory and the ~1 s sync clean near the cap are unverified).
+2. Deferred from the final review: `trackHands` lacks the spec's free-slot rule for a lone hand; hands always draw over the face in orbit (`clearDepth`); hands can pass behind the camera at zoom 0.5; cleanup recomputes after every recording Stop when the remembered pref is ON (consider computing only when playing); smoother segment tails keep a few px of causal lag. Full list: `handoff-log/2026-10-03-take-cleanup-and-orbit.md`.
 
 ## 📌 Where we stopped
 Deployed and dark-launched. **To turn uploads on:** pick the public removal address, set `CONTACT_EMAIL=...` in `/home/grayson/apps/mocap-api/.env.local` (on the box), then `cd /home/grayson/apps/mocap-api; sudo docker compose up -d --force-recreate`. The Save button then appears on the live site (the client fetches `/api/config`). Not yet done: one real 50 MB upload measured with `docker stats`, the nightly pull, and anything on a real phone.
