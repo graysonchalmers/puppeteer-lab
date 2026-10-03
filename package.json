@@ -18,6 +18,7 @@
     "facedemo-check": "npm run build && node scripts/facedemo-check.mjs",
     "stamp": "node scripts/build-stamp.mjs --print",
     "share-check": "npm run build && node scripts/share-check.mjs",
+    "topo-sheet": "node scripts/topo-sheet.mjs",
     "server": "node server/index.mjs"
   },
   "dependencies": {

@@ -33,13 +33,19 @@ export function makeCheck() {
   return { check, fail, finish };
 }
 
-/** Never test a server we did not start: refuse a busy port, fail fast if our child exits. */
-export async function startPreview(port) {
+/**
+ * Never test a server we did not start: refuse a busy port, fail fast if our child exits. Serves dist/ unless `outDir`
+ * names another build directory (the topology sheet serves dist-topo).
+ */
+export async function startPreview(port, outDir) {
   const base = `http://localhost:${port}`;
+  const dir = outDir ?? 'dist';
   if (await fetch(base).then(() => true, () => false)) {
     throw new Error(`port ${port} is already serving something; refusing to test a server this script did not start`);
   }
-  const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--port', String(port), '--strictPort'], { stdio: 'ignore' });
+  const args = ['node_modules/vite/bin/vite.js', 'preview', '--port', String(port), '--strictPort'];
+  if (outDir) args.push('--outDir', outDir);
+  const child = spawn(process.execPath, args, { stdio: 'ignore' });
   // On Windows the child is not reaped when this process dies, so kill it on any exit path.
   const stop = () => child.kill();
   process.on('exit', stop);
@@ -48,14 +54,14 @@ export async function startPreview(port) {
     exited = `vite preview exited (code ${code}, signal ${signal})`;
   });
   for (let i = 0; i < 60; i++) {
-    if (exited) throw new Error(`${exited}; is dist/ built?`);
+    if (exited) throw new Error(`${exited}; is ${dir}/ built?`);
     try {
       if ((await fetch(base)).ok) return { base, stop };
     } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
   stop();
-  throw new Error('vite preview did not start (is dist/ built?)');
+  throw new Error(`vite preview did not start (is ${dir}/ built?)`);
 }
 
 /** Serve `take` (a parsed recording) as the shared take, then open the viewer paused at t=0. */
