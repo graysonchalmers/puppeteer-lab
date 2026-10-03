@@ -11,7 +11,6 @@
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, Projection } from './projection';
 import { MeshDetail } from './faceGeometry';
-import { Look } from './looks';
 import { PuppetScene, SceneView } from './PuppetScene';
 import { PuppetState, boostBrows, boostJaw, boostBlink, teethGap } from './puppetState';
 import { LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS } from './faceTopology';
@@ -42,8 +41,6 @@ export interface PuppetOptions {
   meshDetail: MeshDetail;
   /** Orbit view; null/undefined renders the fixed front view exactly as before. */
   view?: SceneView | null;
-  /** Look to render with; undefined = the default look. */
-  look?: Look;
 }
 
 const scenes = new WeakMap<HTMLCanvasElement, PuppetScene>();
@@ -137,7 +134,6 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     meshDetail: opts.meshDetail,
     view: opts.view ?? null,
     handR: frame.handR,
-    look: opts.look,
   }, p);
   ctx.drawImage(scene.canvas, 0, 0, w, h);
   // The overlays are projected with the ortho front-view mapping `p`; under an orbit camera they would float at front-view positions.

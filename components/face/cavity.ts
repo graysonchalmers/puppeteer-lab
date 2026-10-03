@@ -2,9 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Static cavity set for the baked darkening some looks apply: landmarks in the eye sockets, the nostril / nose-wing
+ * Static cavity set for the baked darkening of the look (looks.ts `cavity`): the eye contours, the nostril / nose-wing
  * creases and under the lower lip. Indices are MediaPipe canonical-face landmarks; only those present in a mesh's
- * triangles take effect. Starting values: the comparison sheet shows immediately whether a region is wrong.
+ * triangles take effect. A corner in the set has its vertex color dimmed by the look's cavity strength.
  */
 import type { MeshDetail } from './faceGeometry'; // type-only: faceGeometry imports this module, so no runtime cycle
 import { FACE_TRIS, FACE_TRIS_FULL, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR } from './faceTopology';
