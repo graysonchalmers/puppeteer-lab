@@ -6,7 +6,7 @@ const isColor = (c: number) => Number.isInteger(c) && c >= 0 && c <= 0xffffff;
 describe('look', () => {
   it('is the shipped neon look, value for value', () => {
     expect(LOOK).toEqual({
-      background: 0x050508, skinGray: 0.3, lipGray: 0.22, roughness: 0.4, cavity: 0.8,
+      background: 0x090a0c, skinGray: 0.3, lipGray: 0.22, roughness: 0.4, cavity: 0.8,
       tint: { skin: 0xb8c4ff, lip: 0xff9ad0 },
       ambient: { color: 0x202040, intensity: 0.12 },
       lights: [

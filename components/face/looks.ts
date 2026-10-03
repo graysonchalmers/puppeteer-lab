@@ -28,7 +28,8 @@ export interface Look {
 }
 
 export const LOOK: Look = {
-  background: 0x050508, skinGray: 0.3, lipGray: 0.22, roughness: 0.4, cavity: 0.8,
+  // Must equal STAGE_BG in FaceMeshRenderer.ts (the stage container's color), or the canvas edge shows a seam.
+  background: 0x090a0c, skinGray: 0.3, lipGray: 0.22, roughness: 0.4, cavity: 0.8,
   tint: { skin: 0xb8c4ff, lip: 0xff9ad0 },
   ambient: { color: 0x202040, intensity: 0.12 },
   lights: [
