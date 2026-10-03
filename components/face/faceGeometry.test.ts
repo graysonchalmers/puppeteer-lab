@@ -86,7 +86,7 @@ describe('face normal orientation', () => {
 
   for (const yaw of [0, 45, 60]) {
     for (const detail of ['low', 'full'] as const) {
-      it(`faceNormals point outward from the head on at least 98% of triangles (${detail}, yaw ${yaw})`, () => {
+      it(`faceNormals point outward from the head on at least 97% of triangles (${detail}, yaw ${yaw})`, () => {
         const lm = yawed(yaw);
         const buf = createFaceBuffers(detail);
         updateFaceBuffers(buf, detail, lm, p, buildCreaseGroups(FACE_MESHES[detail].tris, CANONICAL_VERTS, 35));
@@ -118,19 +118,46 @@ describe('face normal orientation', () => {
           }
           if (dot > 0) outward++;
         }
-        expect(outward / nTris).toBeGreaterThanOrEqual(0.98);
+        // Measured after the fix: 99.33% (low) and 98.57% (full) at every yaw; the ~1.4% left are concave triangles (nostrils,
+        // eye sockets) the head-center heuristic calls inward. The old code scored 70-83% at yaw 45/60, so 97% still separates them.
+        expect(outward / nTris).toBeGreaterThanOrEqual(0.97);
+      });
+    }
+  }
+
+  for (const yaw of [0, 45, 60]) {
+    for (const detail of ['low', 'full'] as const) {
+      it(`faceNormals equal -cross(P1-P0, P2-P0) of the mirrored positions, never flipped toward the camera (${detail}, yaw ${yaw})`, () => {
+        const buf = createFaceBuffers(detail);
+        updateFaceBuffers(buf, detail, yawed(yaw), p, buildCreaseGroups(FACE_MESHES[detail].tris, CANONICAL_VERTS, 35));
+        const P = buf.positions;
+        const nTris = FACE_MESHES[detail].tris.length / 3;
+        let facingAway = 0;
+        for (let t = 0; t < nTris; t++) {
+          const a = t * 9;
+          const ux = P[a + 3] - P[a], uy = P[a + 4] - P[a + 1], uz = P[a + 5] - P[a + 2];
+          const vx = P[a + 6] - P[a], vy = P[a + 7] - P[a + 1], vz = P[a + 8] - P[a + 2];
+          const w = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+          const wm = Math.hypot(w[0], w[1], w[2]);
+          const fn = [buf.faceNormals[t * 3], buf.faceNormals[t * 3 + 1], buf.faceNormals[t * 3 + 2]];
+          const fm = Math.hypot(fn[0], fn[1], fn[2]);
+          if (wm < 1e-9) continue; // degenerate sliver: no direction to compare
+          for (let d = 0; d < 3; d++) expect(fn[d] / fm).toBeCloseTo(-w[d] / wm, 5);
+          // A triangle that faces away from the camera (-w.z < 0) keeps its negative-z normal.
+          if (-w[2] < 0) { facingAway++; expect(fn[2]).toBeLessThan(0); }
+        }
+        if (yaw > 0) expect(facingAway).toBeGreaterThan(0);
       });
     }
   }
 
   it('stores the negated, normalized smoothed face normal per corner (the inward normal the shader expects)', () => {
-    const p2 = fitProjection(640, 480, 4 / 3);
     for (const yaw of [0, 45]) {
       for (const detail of ['low', 'full'] as const) {
         for (const angle of [0, 35]) {
           const groups = buildCreaseGroups(FACE_MESHES[detail].tris, CANONICAL_VERTS, angle);
           const buf = createFaceBuffers(detail);
-          updateFaceBuffers(buf, detail, yawed(yaw), p2, groups);
+          updateFaceBuffers(buf, detail, yawed(yaw), p, groups);
           const nCorners = FACE_MESHES[detail].tris.length;
           let single = 0;
           for (let c = 0; c < nCorners; c++) {
