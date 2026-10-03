@@ -229,7 +229,7 @@ describe('createFaceBuffers shade', () => {
   it('cavity darkens only cavity corners, in both meshes (look survives a detail switch)', () => {
     const shade = { ...DEFAULT_SHADE, cavity: 0.5 };
     for (const d of ['low', 'full'] as const) {
-      const w = cornerCavity(d);
+      const w = cornerCavity(FACE_MESHES[d].tris);
       const plain = createFaceBuffers(d);
       const dark = createFaceBuffers(d, shade);
       let hit = 0;

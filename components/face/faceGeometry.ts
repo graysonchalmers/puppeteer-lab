@@ -15,6 +15,7 @@ import { Projection } from './projection';
 import { CreaseGroups } from './creaseGroups';
 import { FACE_TRIS, FACE_TRI_IS_LIP, FACE_TRIS_FULL, FACE_TRI_IS_LIP_FULL } from './faceTopology';
 import { cornerCavity } from './cavity';
+import { topoOverride } from './topoSheetHook';
 
 export type MeshDetail = 'low' | 'full';
 
@@ -22,6 +23,10 @@ export const FACE_MESHES: Record<MeshDetail, { tris: readonly number[]; isLip: r
   low: { tris: FACE_TRIS, isLip: FACE_TRI_IS_LIP },
   full: { tris: FACE_TRIS_FULL, isLip: FACE_TRI_IS_LIP_FULL },
 };
+
+// Sheet builds only (VITE_TOPO_SHEET=1): swap in a candidate table injected as window.__topo. Compiled out otherwise.
+const topo = topoOverride();
+if (topo) { FACE_MESHES.low = topo.low; FACE_MESHES.full = topo.full; }
 
 export const SKIN_GRAY = 0.62;
 export const LIP_GRAY = 0.45;
@@ -41,7 +46,7 @@ export function createFaceBuffers(detail: MeshDetail, shade: FaceShade = DEFAULT
   const { tris, isLip } = FACE_MESHES[detail];
   const nTris = tris.length / 3;
   const colors = new Float32Array(nTris * 9);
-  const cav = shade.cavity > 0 ? cornerCavity(detail) : null;
+  const cav = shade.cavity > 0 ? cornerCavity(tris) : null;
   const rgb = (tint: number): [number, number, number] => [(tint >> 16) & 255, (tint >> 8) & 255, tint & 255].map((v) => v / 255) as [number, number, number];
   const skin = rgb(shade.skinTint), lip = rgb(shade.lipTint);
   for (let t = 0; t < nTris; t++) {
