@@ -22,12 +22,15 @@ export function makeCheck() {
     results.push({ name, ok: !!ok });
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '   ' + detail : ''}`);
   };
+  /** Call from the script's catch: a thrown assertion/timeout must never read as a green run. */
+  const fail = (e) => check('script completed without throwing', false, e instanceof Error ? (e.stack ?? e.message) : String(e));
+  /** Zero checks is a failure too (the script died before asserting anything). */
   const finish = () => {
     const bad = results.filter((r) => !r.ok).length;
     console.log(`\n${results.length - bad}/${results.length} checks passed`);
-    return bad === 0 ? 0 : 1;
+    return results.length > 0 && bad === 0 ? 0 : 1;
   };
-  return { check, finish };
+  return { check, fail, finish };
 }
 
 /** Never test a server we did not start: refuse a busy port, fail fast if our child exits. */
@@ -37,6 +40,9 @@ export async function startPreview(port) {
     throw new Error(`port ${port} is already serving something; refusing to test a server this script did not start`);
   }
   const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--port', String(port), '--strictPort'], { stdio: 'ignore' });
+  // On Windows the child is not reaped when this process dies, so kill it on any exit path.
+  const stop = () => child.kill();
+  process.on('exit', stop);
   let exited = null;
   child.on('exit', (code, signal) => {
     exited = `vite preview exited (code ${code}, signal ${signal})`;
@@ -44,11 +50,11 @@ export async function startPreview(port) {
   for (let i = 0; i < 60; i++) {
     if (exited) throw new Error(`${exited}; is dist/ built?`);
     try {
-      if ((await fetch(base)).ok) return { base, stop: () => child.kill() };
+      if ((await fetch(base)).ok) return { base, stop };
     } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
-  child.kill();
+  stop();
   throw new Error('vite preview did not start (is dist/ built?)');
 }
 

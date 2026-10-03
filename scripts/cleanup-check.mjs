@@ -16,7 +16,7 @@ import { ensureFixture, makeCheck, startPreview, openViewer, seek, snap, diff } 
 const PORT = Number(process.env.CLEANUP_CHECK_PORT ?? 4175);
 const OUT = process.env.PROOF_DIR ?? `.proof/${new Date().toISOString().slice(0, 10)}-take-cleanup`;
 mkdirSync(OUT, { recursive: true });
-const { check, finish } = makeCheck();
+const { check, fail, finish } = makeCheck();
 
 const take = ensureFixture();
 for (let f = 20; f <= 23; f++) {
@@ -24,10 +24,12 @@ for (let f = 20; f <= 23; f++) {
   delete take.frames[f].blendshapes;
 }
 
-const server = await startPreview(PORT);
-const browser = await chromium.launch();
+let server;
+let browser;
 let code = 1;
 try {
+  server = await startPreview(PORT);
+  browser = await chromium.launch();
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -49,7 +51,6 @@ try {
   await snap(page, 'clean-short');
   await page.screenshot({ path: path.join(OUT, '02-cleaned-inside-short-gap.png') });
   const dShort = await diff(page, 'raw-short', 'clean-short');
-  check('inside the short gap the cleaned puppet has a face the raw one lacks', dShort > 0.01, `${(dShort * 100).toFixed(2)}% of pixels differ`);
 
   await seek(page, 2208); // inside the fixture's own 800 ms dropout (1800..2550 ms)
   await snap(page, 'clean-long');
@@ -59,7 +60,11 @@ try {
   await seek(page, 2208);
   await snap(page, 'raw-long');
   const dLong = await diff(page, 'raw-long', 'clean-long');
-  check('inside the long gap neither version invents a face', dLong < dShort / 3, `${(dLong * 100).toFixed(2)}% vs ${(dShort * 100).toFixed(2)}%`);
+  const pct = `${(dShort * 100).toFixed(2)}% short vs ${(dLong * 100).toFixed(2)}% long`;
+  // Calibration: a restored face moves ~9.90% of pixels (short gap); with no face in either version the hands alone
+  // still differ by ~1.53% (smoothing), so the floor sits at 3% and the short gap must also beat the long gap 3x.
+  check('inside the short gap the cleaned puppet has a face the raw one lacks', dShort > 0.03 && dShort > 3 * dLong, pct);
+  check('inside the long gap neither version invents a face', dLong < 0.03 && dLong < dShort / 3, pct);
 
   await page.getByTestId('cleanup-toggle').click();
   await page.waitForTimeout(300);
@@ -68,10 +73,10 @@ try {
   check('the choice is remembered across a reload', (await page.getByTestId('cleanup-toggle').getAttribute('aria-checked')) === 'true');
   check('no page errors', errors.length === 0, errors.join(' | '));
 } catch (e) {
-  console.error(e);
+  fail(e);
 } finally {
   code = finish();
-  await browser.close();
-  server.stop();
+  await browser?.close().catch(() => {});
+  server?.stop();
 }
 process.exit(code);
