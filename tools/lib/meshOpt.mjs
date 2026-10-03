@@ -12,6 +12,7 @@
  * Energy = wQuality * sum(1 - triangle quality) + wValence * sum((valence - target)^2)
  *        + wDihedral * sum(dihedral over interior edges) + wFlow * sum(flow penalty over interior edges).
  */
+// Vertex ids must be below 1024 (the key packs a*1024+b).
 export const edgeKey = (a, b) => (a < b ? a * 1024 + b : b * 1024 + a);
 export const keyEdge = (k) => [Math.floor(k / 1024), k % 1024];
 export const orient2 = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
@@ -111,7 +112,8 @@ export function totalEnergy(tris, { pos2, pos3, ...opts }) {
 }
 
 /** Winding sign of the mesh (majority) and the indices of triangles that are degenerate or wound the other way. */
-function windingInfo(tris, pos2) {
+// exported for tests
+export function windingInfo(tris, pos2) {
   const area = tris.map((t) => orient2(pos2[t[0]], pos2[t[1]], pos2[t[2]]));
   let pos = 0, neg = 0;
   for (const a of area) { if (a > EPS) pos++; else if (a < -EPS) neg++; }
@@ -122,7 +124,8 @@ function windingInfo(tris, pos2) {
 }
 
 /** The geometric part of flipping edge `key`: returns the two replacement triangles, or null if the flip is invalid. */
-function flipCandidate(tris, adj, key, pos2, sign0, frozen) {
+// exported for tests
+export function flipCandidate(tris, adj, key, pos2, sign0, frozen) {
   const l = adj.get(key);
   if (!l || l.length !== 2) return null;
   const [i1, i2] = l;
@@ -144,13 +147,15 @@ function flipCandidate(tris, adj, key, pos2, sign0, frozen) {
 }
 
 /** Exact change of the global energy if the flip were applied (negative = better). */
-function flipDelta(tris, adj, val, bv, f, o, pos2, pos3) {
+// exported for tests
+export function flipDelta(tris, adj, val, bv, f, o, pos2, pos3) {
   const { i1, i2, u, v, c, d, n1, n2 } = f;
   const T1 = tris[i1], T2 = tris[i2];
   const vp = (x, dv) => (val.get(x) + dv - (bv.has(x) ? 4 : 6)) ** 2;
   const outside = (a, b) => {
     const l = adj.get(edgeKey(a, b));
-    const j = l ? l.find((x) => x !== i1 && x !== i2) : undefined;
+    if (!l || l.length !== 2) return null; // totalEnergy ignores edges that are not in exactly 2 triangles
+    const j = l.find((x) => x !== i1 && x !== i2);
     return j === undefined ? null : tris[j];
   };
   let before = o.wQuality * (2 - triQuality(pos3, T1) - triQuality(pos3, T2));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize, enforceEdge, enforceChains, qualityReport, formatReport } from './meshOpt.mjs';
+import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize, enforceEdge, enforceChains, qualityReport, formatReport, windingInfo, flipCandidate, flipDelta } from './meshOpt.mjs';
 
 /** n x n vertex grid; every cell split along the same diagonal; pos3 gets a bumpy height field. */
 function grid(n, bumpy = true) {
@@ -59,8 +59,9 @@ describe('optimize', () => {
     expect(r.tris).toEqual(tris);
   });
 
-  it('never flips when the quad is not convex (no fold-over)', () => {
-    const pos2 = [[0, 0], [2, 0], [5, 1], [1, -1]];
+  it('never flips when the quad is not convex (no fold-over), even though the flip would improve quality', () => {
+    // Concave at u=0: the replacement triangle [0,3,2] has orientation -0.5, yet the quality sum would rise (~0.66 -> ~0.73).
+    const pos2 = [[0, 0], [4, 0], [1, 1], [-1, -0.5]];
     const pos3 = pos2.map(([x, y]) => [x, y, 0]);
     const tris = [[0, 1, 2], [1, 0, 3]];
     const r = optimize(tris, { pos2, pos3, ...qOnly });
@@ -78,14 +79,31 @@ describe('optimize', () => {
     expect(buildAdjacency(r.tris).has(edgeKey(0, 2))).toBe(true);
   });
 
-  it('freezes degenerate and inverted triangles instead of flipping across them', () => {
-    // Triangle 1 is collinear (zero area): the edge it shares with triangle 0 must stay.
-    const pos2 = [[0, 0], [2, 0], [1, 1], [4, 0]];
+  it('freezes a degenerate (collinear) triangle instead of flipping across it', () => {
+    // Consistently wound; the quad is convex and the flip improves quality, so it flips unless triangle 1 is frozen.
+    const pos2 = [[0, 0], [2, 0], [1, 1], [1, 0]];
     const pos3 = pos2.map(([x, y]) => [x, y, 0]);
-    const tris = [[0, 1, 2], [1, 3, 0]];
+    const tris = [[0, 1, 2], [1, 0, 3]];
     const r = optimize(tris, { pos2, pos3, ...qOnly });
-    expect(r.frozen).toBeGreaterThan(0);
+    expect(r.frozen).toBe(1);
     expect(r.flips).toBe(0);
+    expect(r.tris).toEqual(tris);
+  });
+
+  it('freezes an inverted triangle instead of flipping across it', () => {
+    // Fan of 3 triangles around vertex 0; the middle one [0,2,3] is wound the other way (orientation < 0), the majority is CCW.
+    const pos2 = [[0, 0], [2, 0], [1, 1], [1.5, 0.3], [0, 2]];
+    // pos3 is chosen so that flipping edge 0-2 (which borders the inverted triangle) would clearly improve quality:
+    // vertices 0,1,2,3 form a thin rhombus in 3D with 0-2 as the long diagonal. Without the freeze it would flip.
+    const pos3 = [[-2, 0, 0], [0, -1, 0], [2, 0, 0], [0, 1, 0], [0, 3, 0]];
+    const tris = [[0, 1, 2], [0, 2, 3], [0, 3, 4]];
+    expect(signs(tris, pos2)).toEqual([1, -1, 1]);
+    const r = optimize(tris, { pos2, pos3, ...qOnly });
+    expect(r.frozen).toBe(1);
+    expect(r.flips).toBe(0);
+    expect(r.tris).toEqual(tris);
+    const adj = buildAdjacency(r.tris);
+    for (const [a, b] of [[0, 2], [2, 3], [0, 3]]) expect(adj.has(edgeKey(a, b))).toBe(true);
   });
 
   it('on a bumpy grid: keeps vertices, count, boundary and winding, lowers energy, and is deterministic', () => {
@@ -102,6 +120,55 @@ describe('optimize', () => {
     expect(new Set(signs(r1.tris, pos2))).toEqual(new Set([1]));
     expect(totalEnergy(r1.tris, opts)).toBeLessThan(totalEnergy(tris, opts));
     for (const l of buildAdjacency(r1.tris).values()) expect(l.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('flipDelta is the exact energy change', () => {
+  const bndVerts = (tris) => {
+    const out = new Set();
+    for (const k of boundaryKeys(tris)) for (const x of keyEdge(k)) out.add(x);
+    return out;
+  };
+  const optionSets = {
+    default: {},
+    'with flow': { wFlow: 0.7, centers: [{ c: [2.1, 2.3], r: 1.5 }] },
+  };
+  for (const [name, extra] of Object.entries(optionSets)) {
+    it(`matches totalEnergy(after) - totalEnergy(before) for every flippable interior edge (${name})`, () => {
+      const { pos2, pos3, tris } = grid(6);
+      const o = { wQuality: 1, wValence: 0.1, wDihedral: 1, wFlow: 0, centers: [], ...extra };
+      const eopts = { pos2, pos3, ...o };
+      const adj = buildAdjacency(tris);
+      const val = valences(adj);
+      const bv = bndVerts(tris);
+      const { sign0, frozen } = windingInfo(tris, pos2);
+      expect(sign0).toBe(1);
+      expect(frozen.size).toBe(0);
+      const e0 = totalEnergy(tris, eopts);
+      let checked = 0;
+      for (const key of adj.keys()) {
+        const f = flipCandidate(tris, adj, key, pos2, sign0, frozen);
+        if (!f) continue;
+        const after = tris.map((t) => t.slice());
+        after[f.i1] = f.n1;
+        after[f.i2] = f.n2;
+        const exact = totalEnergy(after, eopts) - e0;
+        expect(Math.abs(flipDelta(tris, adj, val, bv, f, o, pos2, pos3) - exact)).toBeLessThan(1e-9);
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(10);
+    });
+  }
+
+  it('total energy never increases across optimize runs with more sweeps', () => {
+    const { pos2, pos3, tris } = grid(6);
+    const opts = { pos2, pos3, wQuality: 1, wValence: 0.1, wDihedral: 1, wFlow: 0.7, centers: [{ c: [2.1, 2.3], r: 1.5 }] };
+    let prev = totalEnergy(tris, opts);
+    for (const maxSweeps of [0, 1, 2, 3]) {
+      const e = totalEnergy(optimize(tris, { ...opts, maxSweeps }).tris, opts);
+      expect(e).toBeLessThanOrEqual(prev + 1e-9);
+      prev = e;
+    }
   });
 });
 
