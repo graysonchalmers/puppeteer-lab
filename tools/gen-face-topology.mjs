@@ -3,46 +3,74 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Generator for components/face/faceTopology.ts: a thin CLI over tools/lib/faceTopologyBuild.mjs,
- * which picks a ~210-point subset of the 468 face landmarks, Delaunay-triangulates it on the
+ * which picks a ~190-point subset of the 468 face landmarks, Delaunay-triangulates it on the
  * canonical face (frontal, neutral), and cuts holes for the eyes and the mouth. The output is a
  * FIXED table: never triangulate at runtime (the topology would pop between frames).
  *
  * Run: node tools/gen-face-topology.mjs [path/to/reference.obj] [--variant current|flip|flow]
  *        [--out path] [--emit-candidates path]
+ *
+ * --variant writes that variant's low and full tables (default current) and prints its quality report.
+ * --emit-candidates writes every variant as JSON for the comparison harness and prints the full
+ * report; in that mode the TS file is written only when --out is also given.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildVariants, SETS } from './lib/faceTopologyBuild.mjs';
+import { qualityReport, formatReport } from './lib/meshOpt.mjs';
+
+const USAGE = 'usage: node tools/gen-face-topology.mjs [reference.obj] [--variant current|flip|flow] [--out path] [--emit-candidates path]';
+const fail = (msg) => { console.error(msg); process.exit(1); };
 
 const args = process.argv.slice(2);
 let objPath = 'tools/data/canonical_face_model.obj';
 let variant = 'current';
-let outPath = 'components/face/faceTopology.ts';
+let outPath = null;
 let emitCandidates = null;
+const value = (k) => {
+  const v = args[k + 1];
+  if (v === undefined || v.startsWith('--')) fail(`${args[k]} needs a value\n${USAGE}`);
+  return v;
+};
 for (let k = 0; k < args.length; k++) {
   const a = args[k];
-  if (a === '--variant') variant = args[++k];
-  else if (a === '--out') outPath = args[++k];
-  else if (a === '--emit-candidates') emitCandidates = args[++k] ?? '';
-  else if (a.startsWith('--')) { console.error(`unknown flag ${a}`); process.exit(1); }
+  if (a === '--variant') variant = value(k++);
+  else if (a === '--out') outPath = value(k++);
+  else if (a === '--emit-candidates') emitCandidates = value(k++);
+  else if (a.startsWith('--')) fail(`unknown flag ${a}\n${USAGE}`);
   else objPath = a;
 }
-if (emitCandidates !== null) { console.error('--emit-candidates: not available yet'); process.exit(1); }
 
 const B = buildVariants(objPath);
-const chosen = B.variants[variant];
-if (!chosen) {
-  console.error(`unknown or unavailable variant "${variant}" (available: ${Object.keys(B.variants).join(', ')})`);
-  process.exit(1);
+if (!Object.hasOwn(B.variants, variant)) {
+  fail(`unknown or unavailable variant "${variant}" (available: ${Object.keys(B.variants).join(', ')})`);
 }
+const chosen = B.variants[variant];
 const { V, SUBSET } = B;
+const r4 = (n) => Math.round(n * 1e4) / 1e4;
+
+if (emitCandidates !== null) {
+  const variants = {};
+  for (const [name, v] of Object.entries(B.variants)) {
+    variants[name] = {
+      low: { tris: v.low.tris.flat(), isLip: v.low.isLip },
+      full: { tris: v.full.tris.flat(), isLip: v.full.isLip },
+    };
+  }
+  fs.mkdirSync(path.dirname(path.resolve(emitCandidates)), { recursive: true });
+  fs.writeFileSync(emitCandidates, JSON.stringify({ verts: V.flat().map(r4), variants, stats: B.stats, report: B.reports }));
+  console.log(B.reports);
+  console.log(`candidates: ${emitCandidates}`);
+  if (outPath === null) process.exit(0);
+}
+if (outPath === null) outPath = 'components/face/faceTopology.ts';
+
 const { FACE_OVAL, LIPS_OUTER, LIPS_INNER_UPPER, LIPS_INNER_LOWER, LIPS_INNER, L_EYE_LOWER, L_EYE_UPPER,
   R_EYE_LOWER, R_EYE_UPPER, LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS } = SETS;
 const { tris, isLip, removed } = chosen.low;
 const { tris: fullTris, isLip: isLipFull, removed: removedFull } = chosen.full;
 
 const pairs = (upper, lower) => [...upper].reverse().map((u, k) => [u, lower[k]]);
-const r4 = (n) => Math.round(n * 1e4) / 1e4;
 
 const arr = (a) => `[${a.join(', ')}]`;
 const out = `/**
@@ -84,5 +112,8 @@ export const LEFT_EYE_LID_PAIRS: readonly [number, number][] = ${JSON.stringify(
 export const RIGHT_EYE_LID_PAIRS: readonly [number, number][] = ${JSON.stringify(pairs(R_EYE_UPPER, R_EYE_LOWER))};
 `;
 fs.writeFileSync(outPath, out);
-console.log(`faceTopology.ts: ${SUBSET.length} verts, ${tris.length} tris`, removed);
+console.log(`${path.basename(outPath)} (${variant}): ${SUBSET.length} verts, ${tris.length} tris`, removed);
 console.log(`FULL: ${fullTris.length} tris`, removedFull);
+if (emitCandidates === null) {
+  for (const mesh of ['low', 'full']) console.log(formatReport(`${variant} ${mesh}`, qualityReport(chosen[mesh].tris, V)));
+}
