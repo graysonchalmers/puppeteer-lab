@@ -3,7 +3,7 @@
 _Last updated: 2026-10-03 (CT)_
 
 ## 🎯 Current state
-Everything on `main` is pushed and live at [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com) (`main@9032c24`, static redeploy 2026-10-03). The API container (`mocap-api-mocap-api-1`) is up from the 2026-09-30 dark launch and untouched since: `/api/*` and `/t/*` routed, **uploads OFF** (no `CONTACT_EMAIL`).
+Everything on `main` is pushed and live at [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com) (`main@89893be`, static redeploy 2026-10-03, the second that day). The API container (`mocap-api-mocap-api-1`) is up from the 2026-09-30 dark launch and untouched since: `/api/*` and `/t/*` routed, **uploads OFF** (no `CONTACT_EMAIL`).
 
 - **Take Clean up + Orbit (new, live).** Two switches in the share viewer and Face Puppet playback, both off by default. Spec `docs/superpowers/specs/2026-10-02-take-cleanup-and-orbit-design.md`, plan `docs/superpowers/plans/2026-10-02-take-cleanup-and-orbit.md`, user doc `docs/TAKE_CLEANUP_AND_ORBIT.md`.
   - **Clean up** (remembered per viewer): resamples a take, fills dropouts up to 300 ms, zero-phase smoothing; raw frames, exports and share upload stay raw. Takes over 100 s (`MAX_GRID_SLOTS = 6000`) are skipped. The badge counts dropout events in source time (1.75 x dt threshold, calibrated on a real take).
@@ -17,7 +17,7 @@ Cleanup + orbit built, reviewed, pushed and deployed; live check passed 8/8 with
 ## ▶️ Next concrete step
 1. **Real-iPhone pass on the live site** (start card, one prompt, import or record a take, Clean up, Orbit with touch). It is the biggest open check for the new work and also covers the carried-over phone unknowns.
 2. Alternative: **pick `CONTACT_EMAIL` and switch uploads on** (set it in `/home/grayson/apps/mocap-api/.env.local` on the box, then `cd /home/grayson/apps/mocap-api; sudo docker compose up -d --force-recreate`), then one live end-to-end save, phone open, `docker stats` during a big one, and one `Pull-Takes.ps1`. After that real links exist to open Clean up / Orbit on.
-3. Alternative: **clean the deferred items** (list below), best first: the `trackHands` free-slot rule. (Fixed locally 2026-10-03, not yet pushed/deployed: Clean up now computes only while a take plays, so the remembered pref no longer stalls every Stop; `facedemo-check` 27/27 pins it.)
+3. Alternative: **clean the deferred items** (list below), best first: the `trackHands` free-slot rule. (Fixed, pushed and live 2026-10-03 as `89893be`: Clean up computes only while a take plays, so the remembered pref no longer stalls every Stop; `facedemo-check` 27/27 pins it.)
 
 Roadmap with reasoning for the share-link work: `docs/SHARE_LINKS_ROADMAP.md`.
 
