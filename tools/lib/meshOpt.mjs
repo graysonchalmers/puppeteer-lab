@@ -8,7 +8,8 @@
  *
  * Edge-flip optimization: a flip replaces the shared edge of two triangles with the other diagonal of their quad. It is
  * applied only when the quad is strictly convex in 2D (no fold-over), the edge is neither locked nor on the boundary,
- * and the exact change in a global energy is strictly negative, so the sweeps terminate and the result is deterministic.
+ * the optional min-angle guard allows it (see guardAllows), and the exact change in a global energy is strictly
+ * negative, so the sweeps terminate and the result is deterministic.
  * Energy = wQuality * sum(1 - triangle quality) + wValence * sum((valence - target)^2)
  *        + wDihedral * sum(dihedral over interior edges) + wFlow * sum(flow penalty over interior edges).
  */
@@ -72,6 +73,40 @@ function unitNormal(pos3, t) {
   const n = cross(sub(b, a), sub(c, a));
   const l = len(n) || 1;
   return [n[0] / l, n[1] / l, n[2] / l];
+}
+
+/**
+ * Shape of one triangle in 3D: its smallest angle in degrees and its aspect (longest edge squared over twice the
+ * area, i.e. longest edge over the height on it; Infinity when degenerate). qualityReport and the optimizer's guard
+ * both use this, so the guard protects exactly what the report measures.
+ */
+export function triShape(pos3, t) {
+  const [a, b, c] = t.map((i) => pos3[i]);
+  const la = len(sub(b, c)), lb = len(sub(a, c)), lc = len(sub(a, b));
+  const ang = (opp, s1, s2) => deg(Math.acos(Math.max(-1, Math.min(1, (s1 * s1 + s2 * s2 - opp * opp) / (2 * s1 * s2 || 1)))));
+  const area = 0.5 * len(cross(sub(b, a), sub(c, a)));
+  const longest = Math.max(la, lb, lc);
+  return {
+    minAngle: Math.min(ang(la, lb, lc), ang(lb, la, lc), ang(lc, la, lb)),
+    aspect: area > 0 ? (longest * longest) / (2 * area) : Infinity,
+  };
+}
+
+/**
+ * Optional min-angle guard on a flip (never part of the energy, so flipDelta stays the exact energy change). With
+ * minAngleGuard = F degrees a flip is rejected when the smaller new minimum 3D angle would be below min(old minimum, F),
+ * or when it would leave more triangles under F than it removes. A flip swaps two triangles for two, so the optimizer
+ * can never lower the worst minimum angle below min(its starting worst, F), nor raise the count of triangles under F.
+ */
+// exported for tests
+export function guardAllows(oldT, newT, pos3, o) {
+  if (!o.minAngleGuard) return true;
+  const F = o.minAngleGuard;
+  const before = oldT.map((t) => triShape(pos3, t).minAngle);
+  const after = newT.map((t) => triShape(pos3, t).minAngle);
+  if (Math.min(...after) < Math.min(...before, F)) return false;
+  const under = (s) => s.filter((x) => x < F).length;
+  return under(after) <= under(before);
 }
 
 export function dihedral(pos3, t1, t2) {
@@ -191,7 +226,7 @@ export function optimize(trisIn, { pos2, pos3, locked = new Set(), ...opts }) {
       if (locked.has(key) || bnd.has(key)) continue;
       const f = flipCandidate(tris, adj, key, pos2, sign0, frozen);
       if (!f) continue;
-      if (flipDelta(tris, adj, val, bv, f, o, pos2, pos3) < -EPS) {
+      if (flipDelta(tris, adj, val, bv, f, o, pos2, pos3) < -EPS && guardAllows([tris[f.i1], tris[f.i2]], [f.n1, f.n2], pos3, o)) {
         tris[f.i1] = f.n1;
         tris[f.i2] = f.n2;
         adj = buildAdjacency(tris);
@@ -292,13 +327,9 @@ export function qualityReport(tris, pos3) {
   const minAngles = [];
   let aspectOver3 = 0;
   for (const t of tris) {
-    const [a, b, c] = t.map((i) => pos3[i]);
-    const la = len(sub(b, c)), lb = len(sub(a, c)), lc = len(sub(a, b));
-    const ang = (opp, s1, s2) => deg(Math.acos(Math.max(-1, Math.min(1, (s1 * s1 + s2 * s2 - opp * opp) / (2 * s1 * s2 || 1)))));
-    minAngles.push(Math.min(ang(la, lb, lc), ang(lb, la, lc), ang(lc, la, lb)));
-    const area = 0.5 * len(cross(sub(b, a), sub(c, a)));
-    const longest = Math.max(la, lb, lc);
-    if (!(area > 0) || (longest * longest) / (2 * area) > 3) aspectOver3++;
+    const s = triShape(pos3, t);
+    minAngles.push(s.minAngle);
+    if (!(s.aspect <= 3)) aspectOver3++;
   }
   const hist = {};
   let interior = 0, ok = 0;

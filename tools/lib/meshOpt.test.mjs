@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize, enforceEdge, enforceChains, qualityReport, formatReport, windingInfo, flipCandidate, flipDelta } from './meshOpt.mjs';
+import { edgeKey, keyEdge, orient2, buildAdjacency, boundaryKeys, valences, totalEnergy, optimize, enforceEdge, enforceChains, qualityReport, formatReport, windingInfo, flipCandidate, flipDelta, triShape, guardAllows } from './meshOpt.mjs';
 
 /** n x n vertex grid; every cell split along the same diagonal; pos3 gets a bumpy height field. */
 function grid(n, bumpy = true) {
@@ -120,6 +120,80 @@ describe('optimize', () => {
     expect(new Set(signs(r1.tris, pos2))).toEqual(new Set([1]));
     expect(totalEnergy(r1.tris, opts)).toBeLessThan(totalEnergy(tris, opts));
     for (const l of buildAdjacency(r1.tris).values()) expect(l.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('min-angle guard', () => {
+  // A convex quad (diagonal B-D, both triangles above 26 degrees) whose dihedral-preferred diagonal A-C makes two slivers.
+  const quad = () => ({
+    pos2: [[-1, 0], [-0.8, -0.5], [1, 0], [-0.7, 0.4]],
+    pos3: [[-1, 0, 0.4], [-0.8, -0.5, 0.2], [1, 0, 0], [-0.7, 0.4, 0.6]],
+    tris: [[0, 1, 3], [1, 2, 3]],
+  });
+  const dOnly = { wQuality: 0, wValence: 0, wDihedral: 1 };
+  const mins = (pos3, tris) => tris.map((t) => triShape(pos3, t).minAngle);
+
+  it('rejects a flip that would create a sliver, which the energy alone takes', () => {
+    const { pos2, pos3, tris } = quad();
+    expect(Math.min(...mins(pos3, tris))).toBeGreaterThan(26);
+    const free = optimize(tris, { pos2, pos3, ...dOnly });
+    expect(free.flips).toBe(1);
+    expect(buildAdjacency(free.tris).has(edgeKey(0, 2))).toBe(true);
+    expect(Math.min(...mins(pos3, free.tris))).toBeLessThan(15);
+    const guarded = optimize(tris, { pos2, pos3, ...dOnly, minAngleGuard: 20 });
+    expect(guarded.flips).toBe(0);
+    expect(guarded.tris).toEqual(tris);
+  });
+
+  it('the floor caps the requirement: under a 14 degree floor the same flip is allowed', () => {
+    const { pos2, pos3, tris } = quad();
+    expect(optimize(tris, { pos2, pos3, ...dOnly, minAngleGuard: 14 }).flips).toBe(1);
+  });
+
+  /** Isosceles triangle with apex angle `deg` at its first vertex (its minimum angle when under 60). */
+  const iso = (pos3, deg) => {
+    const h = Math.tan((deg * Math.PI) / 360);
+    const i = pos3.length;
+    pos3.push([0, 0, 0], [1, -h, 0], [1, h, 0]);
+    return [i, i + 1, i + 2];
+  };
+  const shapes = (degs) => {
+    const pos3 = [];
+    return { pos3, t: degs.map((d) => iso(pos3, d)) };
+  };
+
+  it('guardAllows: off without a floor; compares the new minimum with min(old minimum, floor)', () => {
+    const { pos3, t } = shapes([30, 30, 15, 15, 10, 40, 12, 25, 8, 50]);
+    expect(triShape(pos3, t[2]).minAngle).toBeCloseTo(15, 9);
+    expect(guardAllows([t[0], t[1]], [t[2], t[3]], pos3, {})).toBe(true);
+    expect(guardAllows([t[0], t[1]], [t[2], t[3]], pos3, { minAngleGuard: 20 })).toBe(false); // 15 < min(30, 20)
+    expect(guardAllows([t[0], t[1]], [t[2], t[3]], pos3, { minAngleGuard: 10 })).toBe(true); // 15 >= min(30, 10)
+    expect(guardAllows([t[4], t[5]], [t[6], t[7]], pos3, { minAngleGuard: 20 })).toBe(true); // worst 10 -> 12, one sliver -> one
+    expect(guardAllows([t[4], t[5]], [t[8], t[9]], pos3, { minAngleGuard: 20 })).toBe(false); // worst 10 -> 8
+  });
+
+  it('guardAllows: never raises the count of triangles under the floor, even when the worst angle improves', () => {
+    const { pos3, t } = shapes([10, 40, 15, 15]);
+    // 15 >= min(10, 20), but one sliver becomes two.
+    expect(guardAllows([t[0], t[1]], [t[2], t[3]], pos3, { minAngleGuard: 20 })).toBe(false);
+  });
+
+  it('on a bumpy grid: still flips and lowers the energy, never lowers the worst angle or adds triangles under the floor', () => {
+    const { pos2, pos3, tris } = grid(6);
+    const opts = { pos2, pos3, ...dOnly };
+    const before = qualityReport(tris, pos3);
+    // Control: unguarded, dihedral-only flips do make slivers here (worst 22.7 -> 15.0 degrees, 0 -> 6 under 20).
+    const free = optimize(tris, opts);
+    expect(qualityReport(free.tris, pos3).minAngleMin).toBeLessThan(before.minAngleMin - 5);
+    expect(mins(pos3, free.tris).filter((x) => x < 20).length).toBeGreaterThan(mins(pos3, tris).filter((x) => x < 20).length);
+    for (const F of [20, 35]) {
+      const r = optimize(tris, { ...opts, minAngleGuard: F });
+      const after = qualityReport(r.tris, pos3);
+      expect(r.flips).toBeGreaterThan(0);
+      expect(totalEnergy(r.tris, opts)).toBeLessThan(totalEnergy(tris, opts));
+      expect(after.minAngleMin).toBeGreaterThanOrEqual(Math.min(before.minAngleMin, F) - 1e-9);
+      expect(mins(pos3, r.tris).filter((x) => x < F).length).toBeLessThanOrEqual(mins(pos3, tris).filter((x) => x < F).length);
+    }
   });
 });
 
