@@ -26,6 +26,14 @@ describe('generator CLI', () => {
     expect(text).toContain('840 FULL triangles');
     expect(text).not.toBe(norm(readFileSync('components/face/faceTopology.ts', 'utf8')));
   });
+  it('--variant current without --out refuses to overwrite the shipped table', () => {
+    const file = 'components/face/faceTopology.ts';
+    const before = readFileSync(file);
+    const r = cli(['--variant', 'current']);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('--variant current needs --out');
+    expect(readFileSync(file).equals(before)).toBe(true);
+  });
   it('rejects an unknown variant', () => {
     const r = cli(['--variant', 'nope', '--out', path.join(os.tmpdir(), 'x.ts')]);
     expect(r.status).not.toBe(0);
