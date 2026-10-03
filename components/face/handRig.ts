@@ -33,8 +33,8 @@ const len = (a: V3) => Math.hypot(a[0], a[1], a[2]);
 const unit = (a: V3): V3 => { const m = len(a) || 1; return [a[0] / m, a[1] / m, a[2] / m]; };
 const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-export function handRig(lm: Landmark[], p: Projection) {
-  const P = lm.map((l) => toScene(l, p));
+/** Capsule rig from points already in scene units (the orbit view places hands in depth before calling this). */
+export function handRigFromScenePoints(P: V3[]) {
   const size = len(sub(P[9], P[0]));
 
   const segments: Segment[] = [];
@@ -61,4 +61,8 @@ export function handRig(lm: Landmark[], p: Projection) {
     joints,
     palm: { center, u, v, n, su: size * 0.55, sv: width * 0.6, sn: (width * 0.6) / 3 } as PalmPad,
   };
+}
+
+export function handRig(lm: Landmark[], p: Projection) {
+  return handRigFromScenePoints(lm.map((l) => toScene(l, p)));
 }
