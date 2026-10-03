@@ -3,8 +3,8 @@
 _Last updated: 2026-10-03 (CT)_
 
 ## 🎯 Current state
-- **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com)): `main@4b06e56` (stamp `v0.0.0 🥝 ARREST · 4b06e5 · 2026-09-30`), deployed 2026-09-30: Face Puppet default load + permission flow, and the share-links backend **dark-launched** (container up, `/api/*` and `/t/*` routed, uploads OFF).
-- **Take cleanup + orbit camera built, NOT pushed or deployed** (22 local commits on `main` after `225ac42`; spec `docs/superpowers/specs/2026-10-02-take-cleanup-and-orbit-design.md`, plan `docs/superpowers/plans/2026-10-02-take-cleanup-and-orbit.md`, user doc `docs/TAKE_CLEANUP_AND_ORBIT.md`).
+- **Live** ([mocap.graysonchalmers.com](https://mocap.graysonchalmers.com)): `main@9032c24` (static redeploy 2026-10-03: Clean up + Orbit; API container untouched, uploads still off); before that `main@4b06e56`, deployed 2026-09-30: Face Puppet default load + permission flow, and the share-links backend **dark-launched** (container up, `/api/*` and `/t/*` routed, uploads OFF).
+- **Take cleanup + orbit camera built, pushed (`9032c24`) and deployed 2026-10-03** (24 commits on `main` after `225ac42`; spec `docs/superpowers/specs/2026-10-02-take-cleanup-and-orbit-design.md`, plan `docs/superpowers/plans/2026-10-02-take-cleanup-and-orbit.md`, user doc `docs/TAKE_CLEANUP_AND_ORBIT.md`).
   - **Clean up** switch (share viewer + Face Puppet playback): off by default, remembered per viewer; resamples the take, fills dropouts up to 300 ms, zero-phase smoothing; raw frames, exports and share upload stay raw. Takes over 100 s (`MAX_GRID_SLOTS = 6000`) are skipped. Badge counts dropout events in source time (1.75 x dt threshold, calibrated on a real take).
   - **Orbit** switch: drag / wheel / pinch / double-tap or Reset; yaw +-75, pitch +-40, zoom 0.5-2; capture-pose perspective camera, hands placed by size-based depth (`handDepth.ts`, plausible not metric). Pitch sign deliberately `Euler(-pitch, yaw)`; pinned by `orbitCamera.test.ts`.
   - **Gates:** typecheck clean, 427 tests, smoke, phone-check 97/97, share-check 28/28, and new `npm run cleanup-check` (7/7), `orbit-check` (11/11), `facedemo-check` (21/21). `recordingSchema.test.ts` "under 100ms" is a pre-existing load-sensitive flake: verify it alone.
@@ -16,7 +16,7 @@ _Last updated: 2026-10-03 (CT)_
 - **Gates at the last full run:** typecheck clean, 321+ tests, smoke OK, `npm run phone-check` 97/97 (flaky under low RAM: fixed-wait drawer/mic checks; passes on re-run), `npm run share-check` 28/28 (real server + vite preview, Chromium desktop flow, WebKit iPhone Save + rotation, pull script). The image now builds on apps-01. Live checks passed (health, config, 503, admin 401, `/t/<id>` viewer not-found state); the upload path itself has NOT been exercised live.
 
 ## 🆕 Open after the cleanup/orbit build
-1. Push `main` and redeploy (static deploy to apps-01, see `docs/SHARE_LINKS.md` and the roadmap), then check Clean up / Orbit on a real iPhone (touch drag, pinch, double-tap, `touch-action`, memory and the ~1 s sync clean near the cap are unverified).
+1. Check Clean up / Orbit on a real iPhone (touch drag, pinch, double-tap, `touch-action`, memory and the ~1 s sync clean near the cap are unverified).
 2. Deferred from the final review: `trackHands` lacks the spec's free-slot rule for a lone hand; hands always draw over the face in orbit (`clearDepth`); hands can pass behind the camera at zoom 0.5; cleanup recomputes after every recording Stop when the remembered pref is ON (consider computing only when playing); smoother segment tails keep a few px of causal lag. Full list: `handoff-log/2026-10-03-take-cleanup-and-orbit.md`.
 
 ## 📌 Where we stopped
