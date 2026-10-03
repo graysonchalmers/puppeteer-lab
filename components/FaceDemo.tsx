@@ -88,7 +88,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const [browBoost, setBrowBoost] = useState(0.5);
   const [jawBoost, setJawBoost] = useState(0.75);
   const [blinkBoost, setBlinkBoost] = useState(0.5);
-  const [creaseAngle, setCreaseAngle] = useState(35);
+  const [creaseAngle, setCreaseAngle] = useState(90);
   const [meshDetail, setMeshDetail] = useState<MeshDetail>('low');
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
   const videoAspectRef = useRef(4 / 3);

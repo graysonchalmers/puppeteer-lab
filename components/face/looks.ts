@@ -25,6 +25,9 @@ export interface Look {
   lights: LightSpec[];
   /** sRGB of the hand color: tuned brighter than the face (skinGray * tint) for phone-size legibility. */
   handColor: number;
+  /** Brightness multipliers (0..1) on the self-lit eyeballs and on the teeth (1 = full brightness). */
+  eyeGain: number;
+  teethGain: number;
 }
 
 export const LOOK: Look = {
@@ -38,6 +41,7 @@ export const LOOK: Look = {
     { color: 0x6878b0, intensity: 2.2, pos: [0, 0.6, 1] },
   ],
   handColor: 0x9aa0c0,
+  eyeGain: 0.55, teethGain: 0.55,
 };
 
 export function shadeOf(l: Look): FaceShade {

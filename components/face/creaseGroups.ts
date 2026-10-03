@@ -14,7 +14,16 @@ export interface CreaseGroups {
   tris: Int32Array;
 }
 
-export function buildCreaseGroups(triIdx: readonly number[], verts: readonly number[], angleDeg: number): CreaseGroups {
+/** Undirected edge key for the hard-edge set (landmark ids are below 512). */
+export const hardEdgeKey = (a: number, b: number): number => (a < b ? a * 512 + b : b * 512 + a);
+
+/**
+ * `hardEdges` (hardEdgeKey values) are never smoothed across, at any angle: at each vertex the surrounding triangles
+ * are split into fans wherever two neighbours share a hard edge, and a corner only smooths within its own fan.
+ */
+export function buildCreaseGroups(
+  triIdx: readonly number[], verts: readonly number[], angleDeg: number, hardEdges?: ReadonlySet<number>,
+): CreaseGroups {
   const nTris = triIdx.length / 3;
   const normals = new Float64Array(nTris * 3);
   for (let t = 0; t < nTris; t++) {
@@ -37,6 +46,26 @@ export function buildCreaseGroups(triIdx: readonly number[], verts: readonly num
     }
   }
 
+  // fanOf(v)[t] = fan id of triangle t around vertex v (triangles joined by a non-hard shared edge through v).
+  const fans = new Map<number, Map<number, number>>();
+  const fanOf = (v: number): Map<number, number> => {
+    let f = fans.get(v);
+    if (f) return f;
+    const list = byVertex.get(v)!;
+    const parent = list.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const other = (t: number, w: number) => [0, 1, 2].map((k) => triIdx[t * 3 + k]).filter((x) => x !== v && x !== w);
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const shared = other(list[i], -1).filter((w) => other(list[j], -1).includes(w));
+        if (shared.some((w) => !hardEdges!.has(hardEdgeKey(v, w)))) parent[find(i)] = find(j);
+      }
+    }
+    f = new Map(list.map((t, i) => [t, find(i)]));
+    fans.set(v, f);
+    return f;
+  };
+
   // Winding is consistent across the canonical mesh, so the dot is a true
   // fold angle; -1e-9 keeps exactly-coplanar neighbors in at 0 degrees out.
   const cosLimit = angleDeg <= 0 ? 2 : Math.cos((angleDeg * Math.PI) / 180) - 1e-9;
@@ -45,8 +74,10 @@ export function buildCreaseGroups(triIdx: readonly number[], verts: readonly num
   for (let c = 0; c < nTris * 3; c++) {
     const t = Math.floor(c / 3);
     out.push(t);
+    const fan = hardEdges && hardEdges.size ? fanOf(triIdx[c]) : null;
     for (const u of byVertex.get(triIdx[c])!) {
       if (u === t) continue;
+      if (fan && fan.get(u) !== fan.get(t)) continue;
       const dot = normals[t * 3] * normals[u * 3] + normals[t * 3 + 1] * normals[u * 3 + 1] + normals[t * 3 + 2] * normals[u * 3 + 2];
       if (dot >= cosLimit) out.push(u);
     }

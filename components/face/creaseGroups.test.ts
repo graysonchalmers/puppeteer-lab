@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, it, expect } from 'vitest';
-import { buildCreaseGroups } from './creaseGroups';
+import { buildCreaseGroups, hardEdgeKey } from './creaseGroups';
 import { FACE_TRIS, CANONICAL_VERTS } from './faceTopology';
 
 const group = (g: ReturnType<typeof buildCreaseGroups>, c: number) =>
@@ -48,5 +48,31 @@ describe('buildCreaseGroups', () => {
     const corners = FACE_TRIS.length;
     expect(g.offsets.length).toBe(corners + 1);
     for (let c = 0; c < corners; c++) expect(g.offsets[c + 1] - g.offsets[c]).toBe(1);
+  });
+
+  it('never smooths across a hard edge, at any angle, and keeps the other fans smooth', () => {
+    const hard = new Set([hardEdgeKey(0, 1)]);
+    for (const angle of [60, 91, 180]) {
+      const g = buildCreaseGroups(FOLD_TRIS, FOLD_VERTS, angle, hard);
+      for (let c = 0; c < 6; c++) expect(group(g, c)).toEqual([Math.floor(c / 3)]);
+    }
+  });
+
+  it('a hard edge only splits the vertices it touches: a flat three-triangle fan stays smooth around the far vertex', () => {
+    // Fan around vertex 0: triangles (0,1,2) (0,2,3) (0,3,4), coplanar. Hard edge 0-2 splits fans at vertex 0 and 2 only.
+    const tris = [0, 1, 2, 0, 2, 3, 0, 3, 4];
+    const verts = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, -1, 1, 0];
+    const g = buildCreaseGroups(tris, verts, 90, new Set([hardEdgeKey(0, 2)]));
+    expect(group(g, 0)).toEqual([0]);           // corner of vertex 0 in tri 0: cut from tris 1 and 2
+    expect(group(g, 3).sort()).toEqual([1, 2]); // vertex 0 in tri 1 still smooths with tri 2 (edge 0-3 is soft)
+    expect(group(g, 4)).toEqual([1]);           // vertex 2 in tri 1: cut from tri 0
+    expect(group(g, 5).sort()).toEqual([1, 2]); // vertex 3 sits on soft edges only
+  });
+
+  it('with no hard edges the result equals the plain build', () => {
+    const a = buildCreaseGroups(FACE_TRIS, CANONICAL_VERTS, 35);
+    const b = buildCreaseGroups(FACE_TRIS, CANONICAL_VERTS, 35, new Set());
+    expect(Array.from(b.offsets)).toEqual(Array.from(a.offsets));
+    expect(Array.from(b.tris)).toEqual(Array.from(a.tris));
   });
 });

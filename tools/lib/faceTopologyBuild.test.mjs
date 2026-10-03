@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildVariants, SETS, FLIP_OPTS } from './faceTopologyBuild.mjs';
+import { buildVariants, SETS, FLIP_OPTS, EVEN_ADD } from './faceTopologyBuild.mjs';
 import { keyEdge, buildAdjacency, boundaryKeys, orient2, qualityReport, formatReport, totalEnergy } from './meshOpt.mjs';
 
 const OBJ = 'tools/data/canonical_face_model.obj';
@@ -11,7 +11,7 @@ const norm = (s) => s.replace(/\r\n/g, '\n');
 const cli = (args) => spawnSync(process.execPath, ['tools/gen-face-topology.mjs', ...args], { encoding: 'utf8' });
 
 describe('generator CLI', () => {
-  it('the default CLI output (flip) reproduces the committed faceTopology.ts', () => {
+  it('the default CLI output (even) reproduces the committed faceTopology.ts', () => {
     const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'faceTopology.ts');
     const r = cli(['--out', out]);
     expect(r.status).toBe(0);
@@ -26,13 +26,23 @@ describe('generator CLI', () => {
     expect(text).toContain('840 FULL triangles');
     expect(text).not.toBe(norm(readFileSync('components/face/faceTopology.ts', 'utf8')));
   });
-  it('--variant current without --out refuses to overwrite the shipped table', () => {
+  it('a non-default variant without --out refuses to overwrite the shipped table', () => {
     const file = 'components/face/faceTopology.ts';
-    const before = readFileSync(file);
-    const r = cli(['--variant', 'current']);
-    expect(r.status).toBe(1);
-    expect(r.stderr).toContain('--variant current needs --out');
-    expect(readFileSync(file).equals(before)).toBe(true);
+    for (const v of ['current', 'flip']) {
+      const before = readFileSync(file);
+      const r = cli(['--variant', v]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(`--variant ${v} needs --out`);
+      expect(readFileSync(file).equals(before)).toBe(true);
+    }
+  });
+  it('--variant flip writes the original vertex set (191 vertices, 298 triangles)', () => {
+    const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'flip.ts');
+    expect(cli(['--variant', 'flip', '--out', out]).status).toBe(0);
+    expect(norm(readFileSync(out, 'utf8'))).toContain('191 vertices, 298 triangles');
+  });
+  it('the shipped table is the even variant: 263 vertices, 442 low triangles', () => {
+    expect(norm(readFileSync('components/face/faceTopology.ts', 'utf8'))).toContain('263 vertices, 442 triangles');
   });
   it('rejects an unknown variant', () => {
     const r = cli(['--variant', 'nope', '--out', path.join(os.tmpdir(), 'x.ts')]);
@@ -83,7 +93,7 @@ describe('variants: validity', () => {
   const spans = (t, a, b) => t.some((i) => a.includes(i)) && t.some((i) => b.includes(i));
   const lipSet = new Set([...SETS.LIPS_OUTER, ...SETS.LIPS_INNER]);
 
-  for (const name of ['current', 'flip']) {
+  for (const name of ['current', 'flip', 'even']) {
     for (const mesh of ['low', 'full']) {
       describe(`${name} ${mesh}`, () => {
         const m = B.variants[name][mesh];
@@ -173,13 +183,43 @@ describe('variants: validity', () => {
   });
 
   it('reports the quality of exactly the tables it built, and the weights it used', () => {
-    for (const name of ['current', 'flip']) {
+    for (const name of ['current', 'flip', 'even']) {
       for (const mesh of ['low', 'full']) expect(B.reports).toContain(formatReport(`${name} ${mesh}`, qualityReport(B.variants[name][mesh].tris, pos3)));
     }
     expect(B.reports).toContain(`weights ${JSON.stringify(FLIP_OPTS)}`);
   });
 
-  it('builds exactly the current and flip variants', () => {
-    expect(Object.keys(B.variants).sort()).toEqual(['current', 'flip']);
+  it('builds exactly the current, flip and even variants', () => {
+    expect(Object.keys(B.variants).sort()).toEqual(['current', 'even', 'flip']);
+  });
+
+  describe('even', () => {
+    const e = B.variants.even.low, f = B.variants.flip.low;
+    const used = new Set(e.tris.flat());
+    it('only adds vertices: every Flip vertex survives, the additions are new, inside the oval and outside the holes', () => {
+      for (const i of B.SUBSET) expect(used.has(i)).toBe(true);
+      expect(new Set(EVEN_ADD).size).toBe(EVEN_ADD.length);
+      for (const i of EVEN_ADD) { expect(B.SUBSET).not.toContain(i); expect(used.has(i)).toBe(true); }
+      expect(used.size).toBe(B.SUBSET.length + EVEN_ADD.length);
+    });
+    it('keeps the outline and the hole rings of Flip', () => {
+      expect([...boundaryKeys(e.tris)].sort()).toEqual([...boundaryKeys(f.tris)].sort());
+    });
+    it('leaves the full mesh exactly as Flip', () => {
+      expect(B.variants.even.full).toBe(B.variants.flip.full);
+    });
+    it('is left/right symmetric in its vertex set (each addition has an x-mirror partner)', () => {
+      const near = (v) => { let b = 0, d = Infinity; B.V.forEach((w, j) => { const x = Math.hypot(w[0] + v[0], w[1] - v[1], w[2] - v[2]); if (x < d) { d = x; b = j; } }); return b; };
+      const add = new Set(EVEN_ADD);
+      for (const i of EVEN_ADD) expect(add.has(near(B.V[i]))).toBe(true);
+    });
+    it('meets the bar against Flip: no worse anywhere, and the worst angle and slivers improve a lot', () => {
+      const a = qualityReport(f.tris, pos3), b = qualityReport(e.tris, pos3);
+      expect(b.minAngleMin).toBeGreaterThan(a.minAngleMin + 5);
+      expect(b.slivers20).toBeLessThan(a.slivers20 / 2);
+      expect(b.aspectOver3).toBeLessThan(a.aspectOver3);
+      expect(b.valenceShare5to7).toBeGreaterThanOrEqual(a.valenceShare5to7);
+      expect(b.dihedralMean).toBeLessThan(a.dihedralMean);
+    });
   });
 });

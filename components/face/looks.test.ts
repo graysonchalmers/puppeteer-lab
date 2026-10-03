@@ -16,6 +16,7 @@ describe('look', () => {
         { color: 0x6878b0, intensity: 2.2, pos: [0, 0.6, 1] },
       ],
       handColor: 0x9aa0c0,
+      eyeGain: 0.55, teethGain: 0.55,
     });
   });
 
@@ -27,7 +28,7 @@ describe('look', () => {
     const l = LOOK;
     for (const c of [l.background, l.tint.skin, l.tint.lip, l.ambient.color, l.handColor, ...l.lights.map((x) => x.color)]) expect(isColor(c)).toBe(true);
     for (const g of [l.skinGray, l.lipGray]) { expect(g).toBeGreaterThan(0); expect(g).toBeLessThanOrEqual(1); }
-    for (const v of [l.cavity, l.roughness]) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
+    for (const v of [l.cavity, l.roughness, l.eyeGain, l.teethGain]) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
     expect(l.ambient.intensity).toBeGreaterThanOrEqual(0);
     expect(l.lights.length).toBeGreaterThan(0);
     for (const x of l.lights) { expect(x.intensity).toBeGreaterThanOrEqual(0); expect(x.intensity).toBeLessThanOrEqual(10); expect(x.pos).toHaveLength(3); }

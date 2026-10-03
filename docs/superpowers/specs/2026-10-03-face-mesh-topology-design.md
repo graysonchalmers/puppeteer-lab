@@ -1,3 +1,5 @@
+**Addendum (2026-10-03, evening):** the dropped "Even" variant was built after all (vertex re-pick, 72 additive mirror-paired landmarks on the low mesh, `tools/pick-even-vertices.mjs`) and is the shipped default locally; see `handoff-log/2026-10-03-even-mesh-smoothing-eyes.md`. The vertices-stay-fixed assumption below was relaxed to "vertices are only ever added".
+
 **Outcome (2026-10-03):** Flip shipped (default `--variant flip` in `tools/gen-face-topology.mjs`); Flow and the comparison sheet were removed; Even was not built. See `handoff-log/2026-10-03-face-mesh-topology.md`.
 
 # Face Puppet mesh topology pass: Current, Flip, Flow

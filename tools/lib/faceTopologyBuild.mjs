@@ -6,10 +6,12 @@
  * subset of the 468 face landmarks, Delaunay-triangulates it on the canonical face (frontal,
  * neutral), and cuts holes for the eyes and the mouth. Pure: no file output, no process access.
  *
- * Two variants:
+ * Three variants:
  *  - current: the original tables (Delaunay low mesh, canonical full mesh, holes cut).
  *  - flip: current improved by the edge-flip optimizer in 3D; vertices, count and boundary unchanged.
- *    This is what ships (components/face/faceTopology.ts is the default generator output).
+ *  - even: what ships (components/face/faceTopology.ts is the default generator output). Flip on the low mesh over SUBSET plus EVEN_ADD (extra canonical landmarks that break up the long thin
+ *    spokes around the eyes and the wedges beside the nose); the full mesh is flip's. Never removes a vertex, so
+ *    everything that indexes landmarks (cavity, brows, lips, crease groups) is unaffected.
  * A third variant (Flow: edge-loop chains forced in) was tried and dropped; see handoff-log/2026-10-03-face-mesh-topology.md.
  */
 import fs from 'node:fs';
@@ -37,12 +39,16 @@ const MOCAP_POINTS = [117,123,147,213,187,120,346,352,376,433,411,349,9,151,10,1
 const SUBSET = [...new Set([...FACE_OVAL, ...LIPS_OUTER, ...LIPS_INNER, ...LEFT_EYE, ...RIGHT_EYE,
   ...LEFT_EYEBROW, ...RIGHT_EYEBROW, ...NOSE, ...FILL])];
 
+// Landmarks added by the "even" variant, in greedy pick order (tools/pick-even-vertices.mjs reproduces the list).
+export const EVEN_ADD = Object.freeze([232, 452, 229, 449, 221, 441, 182, 406, 225, 445, 92, 322, 198, 420, 245, 465, 60, 290, 124, 353, 210, 430, 222, 442, 243, 463, 23, 253, 110, 339, 137, 366, 29, 259, 238, 458, 119, 348, 215, 435, 56, 286, 68, 298, 203, 423, 167, 393, 100, 329, 193, 417, 189, 413, 190, 414, 174, 399, 236, 456, 59, 289, 231, 451, 79, 309, 26, 256, 34, 264, 228, 448]);
+const SUBSET_EVEN = [...SUBSET, ...EVEN_ADD];
+
 const frozen = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Object.freeze(v)])));
 
 /** Landmark id sets shared by every variant and the CLI. Frozen: copy before reordering. */
 export const SETS = frozen({
   FACE_OVAL, LIPS_OUTER, LIPS_INNER_UPPER, LIPS_INNER_LOWER, LIPS_INNER, L_EYE_LOWER, L_EYE_UPPER, R_EYE_LOWER, R_EYE_UPPER,
-  LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, NOSE, FILL, MOCAP_POINTS, SUBSET,
+  LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, NOSE, FILL, MOCAP_POINTS, SUBSET, SUBSET_EVEN,
 });
 
 // Tuned 2026-10-03: the min-angle guard stops the optimizer creating slivers (without it Flip improved valence and
@@ -91,21 +97,21 @@ export function buildVariants(objPath) {
     return null;
   };
 
-  const delaunaySubset = () => {
-    const d = new Delaunator(SUBSET.flatMap(P));
-    const all = [];
-    for (let k = 0; k < d.triangles.length; k += 3) all.push([0, 1, 2].map((j) => SUBSET[d.triangles[k + j]]));
-    return all;
+  // Delaunay on the frontal projection of a vertex subset, then the oval and hole cuts.
+  const lowFromSubset = (subset) => {
+    const d = new Delaunator(subset.flatMap(P));
+    const kept = [];
+    const gone = { outside: 0, mouth: 0, eyes: 0 };
+    for (let k = 0; k < d.triangles.length; k += 3) {
+      const t = [0, 1, 2].map((j) => subset[d.triangles[k + j]]);
+      if (!inPoly(centroid(t), FACE_OVAL)) { gone.outside++; continue; }
+      const hole = isHoleTri(t);
+      if (hole) { gone[hole]++; continue; }
+      kept.push(t);
+    }
+    return { tris: kept, removed: gone };
   };
-
-  const tris = [];
-  const removed = { outside: 0, mouth: 0, eyes: 0 };
-  for (const t of delaunaySubset()) {
-    if (!inPoly(centroid(t), FACE_OVAL)) { removed.outside++; continue; }
-    const hole = isHoleTri(t);
-    if (hole) { removed[hole]++; continue; }
-    tris.push(t);
-  }
+  const { tris, removed } = lowFromSubset(SUBSET);
 
   const fullTris = [];
   const removedFull = { mouth: 0, eyes: 0 };
@@ -138,9 +144,18 @@ export function buildVariants(objPath) {
   const flipFull = runFlip(current.full, lipFlagsFull);
   const flip = { low: flipLow.mesh, full: flipFull.mesh };
 
+  /** Low mesh over any vertex subset, edge-flip optimized like the shipped one (used by the vertex re-pick). */
+  const lowFlipFor = (subset) => {
+    const m = lowFromSubset(subset);
+    return runFlip({ ...m, isLip: lipFlags(m.tris) }, lipFlags).mesh;
+  };
+
   const stats = { flip: { low: flipLow.stats, full: flipFull.stats } };
 
-  const variants = { current, flip };
+  const even = { low: lowFlipFor(SUBSET_EVEN), full: flip.full };
+  const subsetFor = { current: SUBSET, flip: SUBSET, even: SUBSET_EVEN };
+
+  const variants = { current, flip, even };
   const sections = [];
   for (const name of Object.keys(variants)) {
     for (const mesh of ['low', 'full']) sections.push(formatReport(`${name} ${mesh}`, qualityReport(variants[name][mesh].tris, pos3)));
@@ -149,7 +164,8 @@ export function buildVariants(objPath) {
   sections.push([
     'current: no optimization',
     `flip: low ${line(stats.flip.low)}; full ${line(stats.flip.full)}; weights ${JSON.stringify(FLIP_OPTS)}`,
+    `even: low = flip over the subset plus ${EVEN_ADD.length} added landmarks; full = flip's`,
   ].join('\n'));
 
-  return { V, F, SUBSET, variants, stats, reports: sections.join('\n\n') };
+  return { V, F, SUBSET, variants, stats, lowFlipFor, subsetFor, inPoly, reports: sections.join('\n\n') };
 }

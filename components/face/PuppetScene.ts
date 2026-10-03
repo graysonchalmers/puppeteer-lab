@@ -12,6 +12,7 @@ import { Landmark } from '../shared/trackerTypes';
 import { Projection, toScene, V3 } from './projection';
 import { MeshDetail, FACE_MESHES, createFaceBuffers, updateFaceBuffers, FaceBuffers } from './faceGeometry';
 import { buildCreaseGroups, CreaseGroups } from './creaseGroups';
+import { hardEdgesFor } from './hardEdges';
 import { eyePose } from './eyes';
 import { handRigFromScenePoints, HAND_SEGMENTS } from './handRig';
 import { DEFAULT_R, focalPx, placeHandPoints } from './handDepth';
@@ -32,6 +33,9 @@ const BROW = 0x16181c;
 const TOOTH_BAND = 0.08;
 const TOOTH_BAND_MAX_HALF_GAP = 0.6;
 const MAX_JOINTS = 42; // 2 hands x 21
+
+/** A hex color scaled toward black by `gain` (self-lit materials have no other brightness control). */
+const dim = (hex: number, gain: number) => new THREE.Color(hex).multiplyScalar(gain);
 
 export interface SceneView extends OrbitView {
   /** Fixed pivot of the take (median nose tip, normalized landmark space); null = image center. */
@@ -150,8 +154,8 @@ export class PuppetScene {
   private eyes: THREE.Mesh[] = [];
   private glints: THREE.Mesh[] = [];
   private cavity = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: CAVITY, side: THREE.DoubleSide }));
-  private teeth = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: TOOTH, side: THREE.DoubleSide }));
-  private toothSeam = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: TOOTH_SEAM, side: THREE.DoubleSide }));
+  private teeth = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: dim(TOOTH, LOOK.teethGain), side: THREE.DoubleSide }));
+  private toothSeam = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: dim(TOOTH_SEAM, LOOK.teethGain), side: THREE.DoubleSide }));
   private closedLip = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: LIP_CLOSED, side: THREE.DoubleSide }));
   private lipSeam = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: LIP_SEAM, side: THREE.DoubleSide }));
   private brows = dynamicMesh(64 * 3, new THREE.MeshBasicMaterial({ color: BROW, side: THREE.DoubleSide }));
@@ -173,7 +177,7 @@ export class PuppetScene {
 
     const tex = eyeTexture();
     for (let i = 0; i < 2; i++) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.MeshBasicMaterial({ map: tex }));
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), new THREE.MeshBasicMaterial({ map: tex, color: dim(0xffffff, LOOK.eyeGain) }));
       const glint = new THREE.Mesh(new THREE.CircleGeometry(1, 16), new THREE.MeshBasicMaterial({ color: 0xffffff }));
       this.eyes.push(eye); this.glints.push(glint);
       this.faceScene.add(eye, glint);
@@ -233,7 +237,7 @@ export class PuppetScene {
       this.detail = detail;
     }
     if (this.crease.detail !== detail || this.crease.angle !== angle) {
-      this.crease = { detail, angle, groups: buildCreaseGroups(FACE_MESHES[detail].tris, CANONICAL_VERTS, angle) };
+      this.crease = { detail, angle, groups: buildCreaseGroups(FACE_MESHES[detail].tris, CANONICAL_VERTS, angle, hardEdgesFor(FACE_MESHES[detail].tris)) };
     }
   }
 

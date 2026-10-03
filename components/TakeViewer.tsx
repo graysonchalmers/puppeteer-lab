@@ -109,7 +109,7 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
       const orbiting = orbitOnRef.current;
       drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current, handR: orbiting ? depthRef.current.handR[idx] : undefined }, canvas.width, canvas.height, {
         showGazeRays: false, showMocapDots: false, videoAspect: take.aspect,
-        browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 35, meshDetail: 'low',
+        browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 90, meshDetail: 'low',
         view: orbiting ? { ...orbitViewRef.current, pivot: depthRef.current.pivot } : null,
       });
       raf = requestAnimationFrame(draw);

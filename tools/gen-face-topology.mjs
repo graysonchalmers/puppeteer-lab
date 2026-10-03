@@ -7,23 +7,23 @@
  * canonical face (frontal, neutral), and cuts holes for the eyes and the mouth. The output is a
  * FIXED table: never triangulate at runtime (the topology would pop between frames).
  *
- * Run: node tools/gen-face-topology.mjs [path/to/reference.obj] [--variant current|flip] [--out path]
+ * Run: node tools/gen-face-topology.mjs [path/to/reference.obj] [--variant current|flip|even] [--out path]
  *
- * --variant writes that variant's low and full tables (default flip, what ships) and prints its
- * quality report. current is the original, unoptimized Delaunay/canonical tables; any variant
- * other than flip requires --out so it cannot overwrite the shipped table.
+ * --variant writes that variant's low and full tables (default even, what ships) and prints its
+ * quality report. current is the original, unoptimized Delaunay/canonical tables, flip the edge-flipped
+ * original vertex set; any variant other than even requires --out so it cannot overwrite the shipped table.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildVariants, SETS } from './lib/faceTopologyBuild.mjs';
 import { qualityReport, formatReport } from './lib/meshOpt.mjs';
 
-const USAGE = 'usage: node tools/gen-face-topology.mjs [reference.obj] [--variant current|flip] [--out path]';
+const USAGE = 'usage: node tools/gen-face-topology.mjs [reference.obj] [--variant current|flip|even] [--out path]';
 const fail = (msg) => { console.error(msg); process.exit(1); };
 
 const args = process.argv.slice(2);
 let objPath = 'tools/data/canonical_face_model.obj';
-let variant = 'flip';
+let variant = 'even';
 let outPath = null;
 const value = (k) => {
   const v = args[k + 1];
@@ -43,12 +43,13 @@ if (!Object.hasOwn(B.variants, variant)) {
   fail(`unknown or unavailable variant "${variant}" (available: ${Object.keys(B.variants).join(', ')})`);
 }
 const chosen = B.variants[variant];
-const { V, SUBSET } = B;
+const { V } = B;
+const SUBSET = B.subsetFor[variant];
 const r4 = (n) => Math.round(n * 1e4) / 1e4;
 
 if (outPath === null) {
   // Only the shipped variant may overwrite the committed table by default.
-  if (variant !== 'flip') fail(`--variant ${variant} needs --out: refusing to overwrite components/face/faceTopology.ts with a non-default variant\n${USAGE}`);
+  if (variant !== 'even') fail(`--variant ${variant} needs --out: refusing to overwrite components/face/faceTopology.ts with a non-default variant\n${USAGE}`);
   outPath = 'components/face/faceTopology.ts';
 }
 
@@ -87,7 +88,7 @@ export const FACE_TRIS: readonly number[] = ${arr(tris.flat())};
 /** 1 when all three vertices sit on a lip ring (drawn one ramp step darker). */
 export const FACE_TRI_IS_LIP: readonly (0 | 1)[] = ${arr(isLip)};
 
-/** FULL mesh: the canonical model's faces, with the same holes cut; edge-flip optimized for the flip variant. */
+/** FULL mesh: the canonical model's faces, with the same holes cut; edge-flip optimized (flip and even). */
 export const FACE_TRIS_FULL: readonly number[] = ${arr(fullTris.flat())};
 export const FACE_TRI_IS_LIP_FULL: readonly (0 | 1)[] = ${arr(isLipFull)};
 
