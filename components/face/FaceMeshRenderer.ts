@@ -12,7 +12,6 @@ import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, Projection } from './projection';
 import { MeshDetail } from './faceGeometry';
 import { PuppetScene, SceneView } from './PuppetScene';
-import { topoOverride } from './topoSheetHook';
 import { PuppetState, boostBrows, boostJaw, boostBlink, teethGap } from './puppetState';
 import { LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS } from './faceTopology';
 
@@ -132,7 +131,7 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     mouthOpen: frame.state.mouthOpen,
     teethGap: teethGap(frame.state, opts.jawBoost),
     creaseAngle: opts.creaseAngle,
-    meshDetail: topoOverride()?.detail ?? opts.meshDetail,
+    meshDetail: opts.meshDetail,
     view: opts.view ?? null,
     handR: frame.handR,
   }, p);

@@ -15,7 +15,6 @@ import { Projection } from './projection';
 import { CreaseGroups } from './creaseGroups';
 import { FACE_TRIS, FACE_TRI_IS_LIP, FACE_TRIS_FULL, FACE_TRI_IS_LIP_FULL } from './faceTopology';
 import { cornerCavity } from './cavity';
-import { topoOverride } from './topoSheetHook';
 
 export type MeshDetail = 'low' | 'full';
 
@@ -23,10 +22,6 @@ export const FACE_MESHES: Record<MeshDetail, { tris: readonly number[]; isLip: r
   low: { tris: FACE_TRIS, isLip: FACE_TRI_IS_LIP },
   full: { tris: FACE_TRIS_FULL, isLip: FACE_TRI_IS_LIP_FULL },
 };
-
-// Sheet builds only (VITE_TOPO_SHEET=1): swap in a candidate table injected as window.__topo. Compiled out otherwise.
-const topo = topoOverride();
-if (topo) { FACE_MESHES.low = topo.low; FACE_MESHES.full = topo.full; }
 
 export const SKIN_GRAY = 0.62;
 export const LIP_GRAY = 0.45;

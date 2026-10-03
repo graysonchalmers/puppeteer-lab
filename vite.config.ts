@@ -21,8 +21,6 @@ export default defineConfig({
   plugins: [react()],
   define: {
     __BUILD_STAMP__: JSON.stringify(buildStamp),
-    // Compile-time flag for the topology comparison sheet only (components/face/topoSheetHook.ts); false in normal builds.
-    __TOPO_SHEET__: JSON.stringify(process.env.VITE_TOPO_SHEET === '1'),
   },
   resolve: {
     alias: {

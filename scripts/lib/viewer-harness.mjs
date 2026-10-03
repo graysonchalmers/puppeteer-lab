@@ -35,7 +35,7 @@ export function makeCheck() {
 
 /**
  * Never test a server we did not start: refuse a busy port, fail fast if our child exits. Serves dist/ unless `outDir`
- * names another build directory (the topology sheet serves dist-topo).
+ * names another build directory.
  */
 export async function startPreview(port, outDir) {
   const base = `http://localhost:${port}`;
