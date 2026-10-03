@@ -1,21 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildVariants, SETS, FLIP_OPTS, FLOW_OPTS, FLOW_CHAINS } from './faceTopologyBuild.mjs';
-import { edgeKey, keyEdge, buildAdjacency, boundaryKeys, orient2, qualityReport, formatReport, totalEnergy } from './meshOpt.mjs';
+import { buildVariants, SETS, FLIP_OPTS } from './faceTopologyBuild.mjs';
+import { keyEdge, buildAdjacency, boundaryKeys, orient2, qualityReport, formatReport, totalEnergy } from './meshOpt.mjs';
 
 const OBJ = 'tools/data/canonical_face_model.obj';
 const norm = (s) => s.replace(/\r\n/g, '\n');
 const cli = (args) => spawnSync(process.execPath, ['tools/gen-face-topology.mjs', ...args], { encoding: 'utf8' });
 
 describe('generator CLI', () => {
-  it('--variant current reproduces the committed faceTopology.ts exactly', () => {
+  it('the default CLI output (flip) reproduces the committed faceTopology.ts', () => {
     const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'faceTopology.ts');
-    const r = cli(['--variant', 'current', '--out', out]);
+    const r = cli(['--out', out]);
     expect(r.status).toBe(0);
     expect(norm(readFileSync(out, 'utf8'))).toBe(norm(readFileSync('components/face/faceTopology.ts', 'utf8')));
+  });
+  it('--variant current runs and writes the original table: same triangle counts, different text from the shipped file', () => {
+    const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'current.ts');
+    const r = cli(['--variant', 'current', '--out', out]);
+    expect(r.status).toBe(0);
+    const text = norm(readFileSync(out, 'utf8'));
+    expect(text).toContain('191 vertices, 298 triangles');
+    expect(text).toContain('840 FULL triangles');
+    expect(text).not.toBe(norm(readFileSync('components/face/faceTopology.ts', 'utf8')));
   });
   it('rejects an unknown variant', () => {
     const r = cli(['--variant', 'nope', '--out', path.join(os.tmpdir(), 'x.ts')]);
@@ -29,7 +38,7 @@ describe('generator CLI', () => {
     expect(r.stderr).not.toContain('TypeError');
   });
   it('rejects a flag with a missing value with a usage error', () => {
-    for (const args of [['--out'], ['--variant'], ['--emit-candidates'], ['--out', '--variant', 'flip'], ['--emit-candidates', '--out', 'x.ts']]) {
+    for (const args of [['--out'], ['--variant'], ['--out', '--variant', 'flip']]) {
       const r = cli(args);
       expect(r.status).not.toBe(0);
       expect(r.stderr).toMatch(/needs a value/);
@@ -62,12 +71,11 @@ describe('variants: validity', () => {
   const B = buildVariants(OBJ);
   const pos2 = B.V.map((v) => [v[0], -v[1]]);
   const pos3 = B.V;
-  const ring = (ids) => ids.map((x, i) => edgeKey(x, ids[(i + 1) % ids.length]));
   const lidsL = [SETS.L_EYE_UPPER, SETS.L_EYE_LOWER], lidsR = [SETS.R_EYE_UPPER, SETS.R_EYE_LOWER];
   const spans = (t, a, b) => t.some((i) => a.includes(i)) && t.some((i) => b.includes(i));
   const lipSet = new Set([...SETS.LIPS_OUTER, ...SETS.LIPS_INNER]);
 
-  for (const name of ['current', 'flip', 'flow']) {
+  for (const name of ['current', 'flip']) {
     for (const mesh of ['low', 'full']) {
       describe(`${name} ${mesh}`, () => {
         const m = B.variants[name][mesh];
@@ -125,29 +133,6 @@ describe('variants: validity', () => {
     }
   });
 
-  it('Flow: hole boundaries are the exact rings, the outer boundary is the exact oval, chains are present', () => {
-    const f = B.variants.flow.low;
-    const expected = new Set([...ring(SETS.FACE_OVAL), ...ring(SETS.LEFT_EYE), ...ring(SETS.RIGHT_EYE), ...ring(SETS.LIPS_INNER)]);
-    expect([...boundaryKeys(f.tris)].sort()).toEqual([...expected].sort());
-    const adj = buildAdjacency(f.tris);
-    const optional = FLOW_CHAINS.filter((c) => c.optional).map((c) => c.name);
-    for (const name of B.stats.flow.low.dropped) expect(optional).toContain(name);
-    const used = FLOW_CHAINS.filter((c) => !B.stats.flow.low.dropped.includes(c.name));
-    expect(used.length).toBeGreaterThanOrEqual(8); // oval, 2 eyes, 2 lip rings, 2 brows, nose bridge are required
-    for (const c of used) for (let i = 0; i + 1 < c.ids.length; i++) expect(adj.has(edgeKey(c.ids[i], c.ids[i + 1]))).toBe(true);
-  });
-
-  it('Flow low has its own edge set: it differs from both Flip low and Current low', () => {
-    const edges = (tris) => [...buildAdjacency(tris).keys()].sort((a, b) => a - b);
-    const flow = edges(B.variants.flow.low.tris);
-    const others = [edges(B.variants.flip.low.tris), edges(B.variants.current.low.tris)];
-    for (const o of others) {
-      expect(flow).not.toEqual(o);
-      // A real difference, not one stray edge (measured 2026-10-03: 14 edges vs Flip, 56 vs Current).
-      expect(flow.filter((k) => !o.includes(k)).length).toBeGreaterThanOrEqual(5);
-    }
-  });
-
   it('full meshes flag lip triangles by centroid inside the closed outer-lip polygon in (x, -y)', () => {
     const P = (i) => pos2[i];
     const poly = [...SETS.LIPS_OUTER, SETS.LIPS_OUTER[0]];
@@ -159,7 +144,7 @@ describe('variants: validity', () => {
       }
       return c;
     };
-    for (const name of ['current', 'flip', 'flow']) {
+    for (const name of ['current', 'flip']) {
       const m = B.variants[name].full;
       const want = m.tris.map((t) => (inside([0, 1].map((a) => t.reduce((s, i) => s + P(i)[a], 0) / 3)) ? 1 : 0));
       expect(m.isLip).toEqual(want);
@@ -167,52 +152,26 @@ describe('variants: validity', () => {
     }
   });
 
-  it('Flip and Flow meet the quality bar against Current: no worse on worst angle, slivers and aspect; better valence and dihedral', () => {
-    for (const name of ['flip', 'flow']) {
-      for (const mesh of ['low', 'full']) {
-        const c = qualityReport(B.variants.current[mesh].tris, pos3);
-        const v = qualityReport(B.variants[name][mesh].tris, pos3);
-        expect(v.minAngleMin).toBeGreaterThanOrEqual(c.minAngleMin - 1e-9);
-        expect(v.slivers20).toBeLessThanOrEqual(c.slivers20);
-        expect(v.aspectOver3).toBeLessThanOrEqual(c.aspectOver3);
-        expect(v.valenceShare5to7).toBeGreaterThan(c.valenceShare5to7);
-        expect(v.dihedralMean).toBeLessThan(c.dihedralMean);
-      }
+  it('Flip meets the quality bar against Current: no worse on worst angle, slivers and aspect; better valence and dihedral', () => {
+    for (const mesh of ['low', 'full']) {
+      const c = qualityReport(B.variants.current[mesh].tris, pos3);
+      const v = qualityReport(B.variants.flip[mesh].tris, pos3);
+      expect(v.minAngleMin).toBeGreaterThanOrEqual(c.minAngleMin - 1e-9);
+      expect(v.slivers20).toBeLessThanOrEqual(c.slivers20);
+      expect(v.aspectOver3).toBeLessThanOrEqual(c.aspectOver3);
+      expect(v.valenceShare5to7).toBeGreaterThan(c.valenceShare5to7);
+      expect(v.dihedralMean).toBeLessThan(c.dihedralMean);
     }
-  });
-
-  it('Flow full equals Flip full', () => {
-    expect(B.variants.flow.full.tris).toEqual(B.variants.flip.full.tris);
   });
 
   it('reports the quality of exactly the tables it built, and the weights it used', () => {
-    for (const name of ['current', 'flip', 'flow']) {
+    for (const name of ['current', 'flip']) {
       for (const mesh of ['low', 'full']) expect(B.reports).toContain(formatReport(`${name} ${mesh}`, qualityReport(B.variants[name][mesh].tris, pos3)));
     }
     expect(B.reports).toContain(`weights ${JSON.stringify(FLIP_OPTS)}`);
-    expect(B.reports).toContain(`weights ${JSON.stringify(FLOW_OPTS)}`);
   });
-});
 
-describe('generator CLI emits candidates', () => {
-  it('writes a candidates JSON with verts, all three variants and the report', () => {
-    const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'c.json');
-    const r = cli(['--emit-candidates', out, '--out', path.join(os.tmpdir(), 'unused.ts')]);
-    expect(r.status).toBe(0);
-    const j = JSON.parse(readFileSync(out, 'utf8'));
-    expect(j.verts).toHaveLength(468 * 3);
-    expect(Object.keys(j.variants).sort()).toEqual(['current', 'flip', 'flow']);
-    expect(j.variants.flip.low.tris.length % 3).toBe(0);
-    expect(typeof j.report).toBe('string');
-  });
-  it('--emit-candidates without --out writes the JSON and leaves faceTopology.ts byte-unchanged', () => {
-    const before = readFileSync('components/face/faceTopology.ts');
-    const out = path.join(mkdtempSync(path.join(os.tmpdir(), 'topo-')), 'c.json');
-    const r = cli(['--emit-candidates', out]);
-    expect(r.status).toBe(0);
-    expect(existsSync(out)).toBe(true);
-    expect(Object.keys(JSON.parse(readFileSync(out, 'utf8')).variants).sort()).toEqual(['current', 'flip', 'flow']);
-    expect(readFileSync('components/face/faceTopology.ts').equals(before)).toBe(true);
-    expect(r.stdout).not.toMatch(/faceTopology\.ts/);
+  it('builds exactly the current and flip variants', () => {
+    expect(Object.keys(B.variants).sort()).toEqual(['current', 'flip']);
   });
 });

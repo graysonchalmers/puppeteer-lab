@@ -7,26 +7,23 @@
  * canonical face (frontal, neutral), and cuts holes for the eyes and the mouth. The output is a
  * FIXED table: never triangulate at runtime (the topology would pop between frames).
  *
- * Run: node tools/gen-face-topology.mjs [path/to/reference.obj] [--variant current|flip|flow]
- *        [--out path] [--emit-candidates path]
+ * Run: node tools/gen-face-topology.mjs [path/to/reference.obj] [--variant current|flip] [--out path]
  *
- * --variant writes that variant's low and full tables (default current) and prints its quality report.
- * --emit-candidates writes every variant as JSON for the comparison harness and prints the full
- * report; in that mode the TS file is written only when --out is also given.
+ * --variant writes that variant's low and full tables (default flip, what ships) and prints its
+ * quality report. current is the original, unoptimized Delaunay/canonical tables.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildVariants, SETS } from './lib/faceTopologyBuild.mjs';
 import { qualityReport, formatReport } from './lib/meshOpt.mjs';
 
-const USAGE = 'usage: node tools/gen-face-topology.mjs [reference.obj] [--variant current|flip|flow] [--out path] [--emit-candidates path]';
+const USAGE = 'usage: node tools/gen-face-topology.mjs [reference.obj] [--variant current|flip] [--out path]';
 const fail = (msg) => { console.error(msg); process.exit(1); };
 
 const args = process.argv.slice(2);
 let objPath = 'tools/data/canonical_face_model.obj';
-let variant = 'current';
+let variant = 'flip';
 let outPath = null;
-let emitCandidates = null;
 const value = (k) => {
   const v = args[k + 1];
   if (v === undefined || v.startsWith('--')) fail(`${args[k]} needs a value\n${USAGE}`);
@@ -36,7 +33,6 @@ for (let k = 0; k < args.length; k++) {
   const a = args[k];
   if (a === '--variant') variant = value(k++);
   else if (a === '--out') outPath = value(k++);
-  else if (a === '--emit-candidates') emitCandidates = value(k++);
   else if (a.startsWith('--')) fail(`unknown flag ${a}\n${USAGE}`);
   else objPath = a;
 }
@@ -49,20 +45,6 @@ const chosen = B.variants[variant];
 const { V, SUBSET } = B;
 const r4 = (n) => Math.round(n * 1e4) / 1e4;
 
-if (emitCandidates !== null) {
-  const variants = {};
-  for (const [name, v] of Object.entries(B.variants)) {
-    variants[name] = {
-      low: { tris: v.low.tris.flat(), isLip: v.low.isLip },
-      full: { tris: v.full.tris.flat(), isLip: v.full.isLip },
-    };
-  }
-  fs.mkdirSync(path.dirname(path.resolve(emitCandidates)), { recursive: true });
-  fs.writeFileSync(emitCandidates, JSON.stringify({ verts: V.flat().map(r4), variants, stats: B.stats, report: B.reports }));
-  console.log(B.reports);
-  console.log(`candidates: ${emitCandidates}`);
-  if (outPath === null) process.exit(0);
-}
 if (outPath === null) outPath = 'components/face/faceTopology.ts';
 
 const { FACE_OVAL, LIPS_OUTER, LIPS_INNER_UPPER, LIPS_INNER_LOWER, LIPS_INNER, L_EYE_LOWER, L_EYE_UPPER,
@@ -114,6 +96,4 @@ export const RIGHT_EYE_LID_PAIRS: readonly [number, number][] = ${JSON.stringify
 fs.writeFileSync(outPath, out);
 console.log(`${path.basename(outPath)} (${variant}): ${SUBSET.length} verts, ${tris.length} tris`, removed);
 console.log(`FULL: ${fullTris.length} tris`, removedFull);
-if (emitCandidates === null) {
-  for (const mesh of ['low', 'full']) console.log(formatReport(`${variant} ${mesh}`, qualityReport(chosen[mesh].tris, V)));
-}
+for (const mesh of ['low', 'full']) console.log(formatReport(`${variant} ${mesh}`, qualityReport(chosen[mesh].tris, V)));

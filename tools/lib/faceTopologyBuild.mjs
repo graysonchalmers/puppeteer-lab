@@ -6,16 +6,15 @@
  * subset of the 468 face landmarks, Delaunay-triangulates it on the canonical face (frontal,
  * neutral), and cuts holes for the eyes and the mouth. Pure: no file output, no process access.
  *
- * Three variants:
- *  - current: the shipped tables (Delaunay low mesh, canonical full mesh, holes cut).
+ * Two variants:
+ *  - current: the original tables (Delaunay low mesh, canonical full mesh, holes cut).
  *  - flip: current improved by the edge-flip optimizer in 3D; vertices, count and boundary unchanged.
- *  - flow: low mesh re-triangulated with edge-loop chains forced in (oval, eyes, lips, brows, nose
- *    bridge), holes cut exactly at the rings, then optimized with the chain edges locked. Its full
- *    mesh is flip's full mesh.
+ *    This is what ships (components/face/faceTopology.ts is the default generator output).
+ * A third variant (Flow: edge-loop chains forced in) was tried and dropped; see handoff-log/2026-10-03-face-mesh-topology.md.
  */
 import fs from 'node:fs';
 import Delaunator from 'delaunator';
-import { optimize, enforceChains, qualityReport, formatReport } from './meshOpt.mjs';
+import { optimize, qualityReport, formatReport } from './meshOpt.mjs';
 
 const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
 const LIPS_OUTER = [61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146];
@@ -46,25 +45,10 @@ export const SETS = frozen({
   LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, NOSE, FILL, MOCAP_POINTS, SUBSET,
 });
 
-// Tuned 2026-10-03 on the topology sheet (Task 6): the min-angle guard stops the optimizer creating slivers (without it
-// Flip and Flow improved valence and dihedral but worsened the worst angle, slivers and aspect); with the guard on,
+// Tuned 2026-10-03: the min-angle guard stops the optimizer creating slivers (without it Flip improved valence and
+// dihedral but worsened the worst angle, slivers and aspect); with the guard on,
 // the old weights (1, 0.1, 1) lost valence share, so quality is weighted down and valence and dihedral up.
 export const FLIP_OPTS = Object.freeze({ wQuality: 0.5, wValence: 0.2, wDihedral: 2, minAngleGuard: 20 });
-export const FLOW_OPTS = Object.freeze({ ...FLIP_OPTS, wFlow: 0.3 });
-const ringOf = (ids) => [...ids, ids[0]];
-/** Edge loops forced into the Flow low mesh, in this order. Only `optional` chains may be dropped. */
-export const FLOW_CHAINS = Object.freeze([
-  { name: 'oval', ids: ringOf(FACE_OVAL) },
-  { name: 'left-eye', ids: ringOf(LEFT_EYE) },
-  { name: 'right-eye', ids: ringOf(RIGHT_EYE) },
-  { name: 'lips-outer', ids: ringOf(LIPS_OUTER) },
-  { name: 'lips-inner', ids: ringOf(LIPS_INNER) },
-  { name: 'left-brow', ids: ringOf(LEFT_EYEBROW) },
-  { name: 'right-brow', ids: ringOf(RIGHT_EYEBROW) },
-  { name: 'nose-bridge', ids: [168, 6, 197, 195, 5, 4, 1, 19, 94, 2] },
-  { name: 'nasolabial-left', ids: [98, 61], optional: true },
-  { name: 'nasolabial-right', ids: [327, 291], optional: true },
-].map((c) => Object.freeze({ ...c, ids: Object.freeze(c.ids) })));
 
 /** Parse the reference OBJ: V is 468 x [x, y, z], F is faces as 0-based id triples. */
 export function loadObj(objPath) {
@@ -154,38 +138,9 @@ export function buildVariants(objPath) {
   const flipFull = runFlip(current.full, lipFlagsFull);
   const flip = { low: flipLow.mesh, full: flipFull.mesh };
 
-  // Flow (low only): chains forced into the subset's Delaunay, holes cut exactly at the rings, then
-  // optimized with the chain edges locked.
-  const enforced = enforceChains(delaunaySubset(), pos2, FLOW_CHAINS);
-  const removedFlow = { outside: 0, mouth: 0, eyes: 0 };
-  const kept = [];
-  for (const t of enforced.tris) {
-    const c = centroid(t);
-    if (!inPoly(c, FACE_OVAL)) { removedFlow.outside++; continue; }
-    if (inPoly(c, LIPS_INNER)) { removedFlow.mouth++; continue; }
-    if (inPoly(c, LEFT_EYE) || inPoly(c, RIGHT_EYE)) { removedFlow.eyes++; continue; }
-    kept.push(t);
-  }
-  const mean = (ids) => [ids.reduce((s, i) => s + P(i)[0], 0) / ids.length, ids.reduce((s, i) => s + P(i)[1], 0) / ids.length];
-  const radius = (c, ids) => Math.max(...ids.map((i) => Math.hypot(P(i)[0] - c[0], P(i)[1] - c[1])));
-  const feature = (ids) => { const c = mean(ids); return { c, r: radius(c, ids) }; };
-  const centers = [feature(LEFT_EYE), feature(RIGHT_EYE), feature(LIPS_OUTER),
-    { c: P(4), r: Math.hypot(P(4)[0] - P(98)[0], P(4)[1] - P(98)[1]) }];
-  const rf = optimize(kept, { pos2, pos3, locked: enforced.locked, ...FLOW_OPTS, centers });
-  const flow = {
-    low: { tris: rf.tris, isLip: lipFlags(rf.tris), removed: removedFlow },
-    full: flip.full,
-  };
+  const stats = { flip: { low: flipLow.stats, full: flipFull.stats } };
 
-  const stats = {
-    flip: { low: flipLow.stats, full: flipFull.stats },
-    flow: {
-      low: { flips: rf.flips, sweeps: rf.sweeps, frozen: rf.frozen, enforcedFlips: enforced.flips, dropped: enforced.dropped },
-      full: flipFull.stats,
-    },
-  };
-
-  const variants = { current, flip, flow };
+  const variants = { current, flip };
   const sections = [];
   for (const name of Object.keys(variants)) {
     for (const mesh of ['low', 'full']) sections.push(formatReport(`${name} ${mesh}`, qualityReport(variants[name][mesh].tris, pos3)));
@@ -194,7 +149,6 @@ export function buildVariants(objPath) {
   sections.push([
     'current: no optimization',
     `flip: low ${line(stats.flip.low)}; full ${line(stats.flip.full)}; weights ${JSON.stringify(FLIP_OPTS)}`,
-    `flow: low ${line(stats.flow.low)}, enforcedFlips ${stats.flow.low.enforcedFlips}, dropped [${stats.flow.low.dropped.join(', ')}]; full = flip full; weights ${JSON.stringify(FLOW_OPTS)}`,
   ].join('\n'));
 
   return { V, F, SUBSET, variants, stats, reports: sections.join('\n\n') };
