@@ -86,6 +86,32 @@ describe('computeHandDepth', () => {
     for (let i = 8; i <= 21; i++) expect(d.handR[i][0]).toBeCloseTo(9.5 / 14.5, 4);
   });
 
+  it('holds the face size when the take STARTS with the hand over the face (leading dropout)', () => {
+    const d = computeHandDepth(run(30, (i) => fr(i * 20, i < 4 ? null : 0.15, 0.15)), 1);
+    for (let i = 0; i < 30; i++) expect(d.handR[i][0]).toBeCloseTo(9.5 / 14.5, 4);
+  });
+
+  it('holds the face size when the take ENDS with the hand over the face (trailing dropout)', () => {
+    const d = computeHandDepth(run(30, (i) => fr(i * 20, i >= 26 ? null : 0.15, 0.15)), 1);
+    for (let i = 0; i < 30; i++) expect(d.handR[i][0]).toBeCloseTo(9.5 / 14.5, 4);
+  });
+
+  it('holds (not fills or extrapolates) the end value when the face size varies across the take', () => {
+    // 400 frames at 20 ms; face 0.12 for the first half, 0.18 for the second, hand constant 0.15. The size smoother has a
+    // ~0.3 s time constant (~16 frames), so the plateaus are fully settled (>180 frames from the step) at both ends and the
+    // held ends must equal the plateau r to 4 decimals (measured residual of the smoothing tail: 8.8e-7); a missing hold gives
+    // r = R_MIN = 0.25 against 0.524 / 0.786, far outside that.
+    const n = 400;
+    const lead = computeHandDepth(run(n, (i) => fr(i * 20, i < 4 ? null : i < 200 ? 0.12 : 0.18, 0.15)), 1);
+    const first = lead.handR[4][0];
+    expect(first).toBeCloseTo((SIZE_RATIO * 0.12) / 0.15, 4);
+    for (let i = 0; i < 4; i++) expect(lead.handR[i][0]).toBeCloseTo(first, 4);
+    const trail = computeHandDepth(run(n, (i) => fr(i * 20, i >= n - 4 ? null : i < 200 ? 0.12 : 0.18, 0.15)), 1);
+    const last = trail.handR[n - 5][0];
+    expect(last).toBeCloseTo((SIZE_RATIO * 0.18) / 0.15, 4);
+    for (let i = n - 4; i < n; i++) expect(trail.handR[i][0]).toBeCloseTo(last, 4);
+  });
+
   it('keeps handR aligned with each frame\'s hand list', () => {
     const frames = [fr(0, 0.15), fr(20, 0.15, 0.15), fr(40, 0.15, 0.15, 0.2)];
     const d = computeHandDepth(frames, 1);
