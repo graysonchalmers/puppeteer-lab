@@ -209,6 +209,100 @@ describe('enforceEdge / enforceChains', () => {
     expect(r.locked.has(edgeKey(id(0, 0), id(2, 2)))).toBe(false);
     expect(() => enforceChains(tris, pos2, [{ name: 'must', ids: [id(0, 0), id(2, 2)] }])).toThrow(/chain "must"/);
   });
+
+  it('rolls back a multi-edge optional chain whose later edge fails: no lock, no triangle change, no flips counted', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const good = { name: 'good', ids: [id(0, 0), id(1, 2), id(0, 4)] };
+    // First edge (0,4)-(1,3) is the anti-diagonal of a cell (one flip, then locked); the second, (1,3)-(3,1), passes through vertex (2,2) and fails.
+    const opt = { name: 'opt', ids: [id(4, 0), id(3, 1), id(1, 3)], optional: true };
+    const base = enforceChains(tris, pos2, [good]);
+    const r = enforceChains(tris, pos2, [good, opt]);
+    expect(r.dropped).toEqual(['opt']);
+    expect(r.locked.has(edgeKey(id(4, 0), id(3, 1)))).toBe(false);
+    expect(r.tris).toEqual(base.tris);
+    expect(r.flips).toBe(base.flips);
+    expect([...r.locked].sort()).toEqual([...base.locked].sort());
+    // Sanity: the optional chain's first edge does succeed (and would be locked) when its second edge is dropped.
+    const first = enforceChains(tris, pos2, [{ name: 'first', ids: [id(4, 0), id(3, 1)] }]);
+    expect(first.flips).toBeGreaterThan(0);
+    expect(first.locked.has(edgeKey(id(4, 0), id(3, 1)))).toBe(true);
+  });
+
+  it('keeps a lock set by an earlier chain when a later optional chain containing that edge is rolled back', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const early = { name: 'early', ids: [id(4, 0), id(3, 1)] };
+    const opt = { name: 'opt', ids: [id(4, 0), id(3, 1), id(1, 3)], optional: true };
+    const r = enforceChains(tris, pos2, [early, opt]);
+    expect(r.dropped).toEqual(['opt']);
+    expect(r.locked.has(edgeKey(id(4, 0), id(3, 1)))).toBe(true);
+    expect(buildAdjacency(r.tris).has(edgeKey(id(4, 0), id(3, 1)))).toBe(true);
+  });
+
+  it('counts only the flips of chains that succeed', () => {
+    const { pos2, tris, id } = grid(5, false);
+    const r = enforceChains(tris, pos2, [{ name: 'only-bad', ids: [id(4, 0), id(3, 1), id(1, 3)], optional: true }]);
+    expect(r.dropped).toEqual(['only-bad']);
+    expect(r.flips).toBe(0);
+    expect(r.tris).toEqual(tris);
+  });
+});
+
+describe('enforceEdge on jittered grids (neutral-flip ping-pong guard)', () => {
+  const mulberry32 = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  /** n x n jittered grid, each cell split along a pseudo-randomly chosen diagonal, all triangles positively wound. */
+  function jittered(n, rand) {
+    const pos2 = [];
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) pos2.push([c + (rand() - 0.5) * 0.3, r + (rand() - 0.5) * 0.3]);
+    const id = (r, c) => r * n + c;
+    const tris = [];
+    for (let r = 0; r + 1 < n; r++) for (let c = 0; c + 1 < n; c++) {
+      if (rand() < 0.5) tris.push([id(r, c), id(r, c + 1), id(r + 1, c + 1)], [id(r, c), id(r + 1, c + 1), id(r + 1, c)]);
+      else tris.push([id(r, c), id(r, c + 1), id(r + 1, c)], [id(r, c + 1), id(r + 1, c + 1), id(r + 1, c)]);
+    }
+    return { pos2, tris, id };
+  }
+
+  it('enforces random interior vertex pairs without a false flip-cap failure', () => {
+    const n = 7;
+    const rand = mulberry32(20261003);
+    const { pos2, tris, id } = jittered(n, rand);
+    expect(new Set(signs(tris, pos2))).toEqual(new Set([1]));
+    const adj0 = buildAdjacency(tris);
+    const interior = [];
+    for (let r = 1; r < n - 1; r++) for (let c = 1; c < n - 1; c++) interior.push(id(r, c));
+    let tested = 0, totalFlips = 0;
+    while (tested < 60) {
+      const a = interior[Math.floor(rand() * interior.length)];
+      const b = interior[Math.floor(rand() * interior.length)];
+      if (a === b || adj0.has(edgeKey(a, b))) continue;
+      const res = enforceEdge(tris, pos2, a, b);
+      expect(buildAdjacency(res.tris).has(edgeKey(a, b))).toBe(true);
+      expect(res.tris).toHaveLength(tris.length);
+      expect(verts(res.tris)).toEqual(verts(tris));
+      expect(new Set(signs(res.tris, pos2))).toEqual(new Set([1]));
+      expect(res.flips).toBeLessThan(200);
+      totalFlips += res.flips;
+      tested++;
+    }
+    expect(totalFlips).toBeGreaterThan(0);
+  });
+
+  it('recovers the pinned cases where flipping the lowest-key crossing edge ping-pongs (9x9, found by a 300-seed search)', () => {
+    // Without the neutral-flip memory these fail with a false 'flip cap reached'; each is a recoverable constraint.
+    for (const [seed, a, b] of [[17, 46, 70], [49, 10, 64], [58, 55, 16], [70, 16, 68]]) {
+      const { pos2, tris } = jittered(9, mulberry32(seed));
+      expect(buildAdjacency(tris).has(edgeKey(a, b))).toBe(false);
+      const res = enforceEdge(tris, pos2, a, b);
+      expect(buildAdjacency(res.tris).has(edgeKey(a, b))).toBe(true);
+      expect(res.tris).toHaveLength(tris.length);
+      expect(new Set(signs(res.tris, pos2))).toEqual(new Set([1]));
+    }
+  });
 });
 
 describe('qualityReport', () => {
@@ -223,6 +317,17 @@ describe('qualityReport', () => {
     expect(r.interiorVertices).toBe(9);
     expect(r.valenceShare5to7).toBe(1);
     expect(r.dihedralMean).toBeCloseTo(0, 5);
-    expect(formatReport('flat', r)).toMatch(/flat/);
+    const text = formatReport('flat', r);
+    expect(text).toMatch(/^flat: 32 triangles/);
+    expect(text).toMatch(/min angle: worst 45\.00 deg, mean 45\.00 deg/);
+    expect(text).toMatch(/interior valence: \{"6":9\} \(100\.0% at 5\.\.7 of 9\)/);
+  });
+
+  it('does not return Infinity or NaN for an empty mesh', () => {
+    const r = qualityReport([], []);
+    expect(r.tris).toBe(0);
+    expect(r.minAngleMin).toBe(0);
+    expect(r.minAngleMean).toBe(0);
+    expect(Object.values(r).filter((v) => typeof v === 'number').every(Number.isFinite)).toBe(true);
   });
 });

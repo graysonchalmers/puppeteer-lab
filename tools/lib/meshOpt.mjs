@@ -214,12 +214,16 @@ const crosses = (pos2, a, b, p, q) => {
 /**
  * Makes edge a-b present by flipping the edges that cross it (convex quads only). Throws if it crosses a locked edge,
  * if no crossing edge can be flipped (for example the segment passes through another vertex), or after `maxFlips`.
+ * A flip whose replacement diagonal no longer crosses a-b strictly reduces the crossing count and is preferred; only
+ * when every flippable edge would still be crossed (a neutral flip) does it fall back to the lowest key, and then never
+ * the edge the previous flip just created, so two neutral flips cannot undo each other forever.
  */
 export function enforceEdge(trisIn, pos2, a, b, locked = new Set(), maxFlips = 5000) {
   const tris = trisIn.map((t) => t.slice());
   const { sign0, frozen } = windingInfo(tris, pos2);
   const target = edgeKey(a, b);
   let flips = 0;
+  let lastCreated = -1;
   for (;;) {
     const adj = buildAdjacency(tris);
     if (adj.has(target)) return { tris, flips };
@@ -229,16 +233,24 @@ export function enforceEdge(trisIn, pos2, a, b, locked = new Set(), maxFlips = 5
       return p !== a && p !== b && q !== a && q !== b && crosses(pos2, a, b, p, q);
     });
     if (!crossing.length) throw new Error(`edge ${a}-${b} cannot be enforced: no crossing edge to flip`);
-    let done = false;
     for (const k of crossing) {
       if (locked.has(k)) {
         const [p, q] = keyEdge(k);
         throw new Error(`edge ${a}-${b} crosses locked edge ${p}-${q}`);
       }
-      const f = flipCandidate(tris, adj, k, pos2, sign0, frozen);
-      if (f) { tris[f.i1] = f.n1; tris[f.i2] = f.n2; flips++; done = true; break; }
     }
-    if (!done) throw new Error(`edge ${a}-${b} cannot be enforced: no convex crossing edge`);
+    const cands = [];
+    for (const k of crossing) {
+      const f = flipCandidate(tris, adj, k, pos2, sign0, frozen);
+      if (f) cands.push({ k, f, reduces: !crosses(pos2, a, b, f.c, f.d) });
+    }
+    if (!cands.length) throw new Error(`edge ${a}-${b} cannot be enforced: no convex crossing edge`);
+    const pick = cands.find((x) => x.reduces) ?? cands.find((x) => x.k !== lastCreated) ?? cands[0];
+    const { f } = pick;
+    tris[f.i1] = f.n1;
+    tris[f.i2] = f.n2;
+    flips++;
+    lastCreated = edgeKey(f.c, f.d);
   }
 }
 
@@ -250,16 +262,18 @@ export function enforceChains(trisIn, pos2, chains, { locked = new Set() } = {})
   const dropped = [];
   for (const ch of chains) {
     const added = [];
+    let chainFlips = 0;
     try {
       let t = cur;
       for (let i = 0; i + 1 < ch.ids.length; i++) {
         const r = enforceEdge(t, pos2, ch.ids[i], ch.ids[i + 1], lockedOut);
         t = r.tris;
-        flips += r.flips;
+        chainFlips += r.flips;
         const k = edgeKey(ch.ids[i], ch.ids[i + 1]);
         if (!lockedOut.has(k)) { lockedOut.add(k); added.push(k); }
       }
       cur = t;
+      flips += chainFlips;
     } catch (e) {
       for (const k of added) lockedOut.delete(k);
       if (!ch.optional) throw new Error(`chain "${ch.name}": ${e.message}`);
@@ -299,8 +313,8 @@ export function qualityReport(tris, pos3) {
   dih.sort((x, y) => x - y);
   return {
     tris: tris.length,
-    minAngleMin: Math.min(...minAngles),
-    minAngleMean: minAngles.reduce((s, x) => s + x, 0) / minAngles.length,
+    minAngleMin: minAngles.length ? Math.min(...minAngles) : 0,
+    minAngleMean: minAngles.length ? minAngles.reduce((s, x) => s + x, 0) / minAngles.length : 0,
     slivers20: minAngles.filter((x) => x < 20).length,
     aspectOver3,
     interiorVertices: interior,
