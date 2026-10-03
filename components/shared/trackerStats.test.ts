@@ -32,6 +32,6 @@ describe('createTickHistory', () => {
 
 describe('createTrackerStats', () => {
   it('starts zeroed with no delegate and the cost policy off', () => {
-    expect(createTrackerStats()).toEqual({ trackFps: 0, faceFps: 0, delegate: null, handMs: 0, faceMs: 0, tickMs: 0, alternating: false, hands: 0, face: false });
+    expect(createTrackerStats()).toEqual({ trackFps: 0, cameraFps: 0, faceFps: 0, delegate: null, handMs: 0, faceMs: 0, tickMs: 0, alternating: false, hands: 0, face: false });
   });
 });

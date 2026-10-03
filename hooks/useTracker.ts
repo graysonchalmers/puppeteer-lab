@@ -279,7 +279,8 @@ export function useTracker(
 
     const getStream = async (wanted: Facing, withAudio: boolean): Promise<MediaStream> => {
       const md = navigator.mediaDevices;
-      const video = { facingMode: { ideal: wanted }, width: { ideal: 640 }, height: { ideal: 480 } };
+      // frameRate is an `ideal`, so a phone that tops out at 30 fps just gets 30; the achieved rate shows in the debug overlay.
+      const video = { facingMode: { ideal: wanted }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } };
       try {
         return await md.getUserMedia({ video, audio: withAudio });
       } catch (e) {
@@ -377,6 +378,7 @@ export function useTracker(
         const vTracks = stream.getVideoTracks();
         const actual = resolveFacing(wanted, vTracks[0]?.getSettings().facingMode);
         setActiveFacing(actual);
+        statsRef.current.cameraFps = vTracks[0]?.getSettings().frameRate ?? 0; // 0 = the browser does not report it
 
         liveStream = new MediaStream(vTracks);
         setCameraIssue(null);

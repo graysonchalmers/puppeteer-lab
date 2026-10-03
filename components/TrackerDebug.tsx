@@ -48,6 +48,7 @@ const TrackerDebug: React.FC<Props> = ({ statsRef, historyRef, renderFpsRef }) =
   return (
     <div data-testid="tracker-debug" className="w-0 min-w-full pt-1 font-mono text-[8px] md:text-[10px] leading-tight text-[#7CFFB2] whitespace-nowrap overflow-hidden">
       <div>loop {s.trackFps.toFixed(0)}  draw {draw.toFixed(0)} fps</div>
+      <div>cam {s.cameraFps > 0 ? `${s.cameraFps.toFixed(0)} fps` : 'n/a'}</div>
       <div className={slow ? 'text-amber-300' : undefined}>tick {s.tickMs.toFixed(0)}ms  hands {s.hands}</div>
       <div>hand {s.handMs.toFixed(0)}ms  face {s.faceMs.toFixed(0)}ms</div>
       <div className={s.alternating ? 'text-amber-300' : undefined}>face {s.faceFps.toFixed(0)}fps{s.alternating ? '  ALT' : ''}</div>

@@ -11,6 +11,8 @@ import type { Delegate } from '../../hooks/cameraSupport';
 export interface TrackerStats {
   /** Tracker ticks per second (rAF loop, successful ticks only). */
   trackFps: number;
+  /** The frame rate the camera track was granted (`getSettings().frameRate`); 0 when the browser does not report it. */
+  cameraFps: number;
   /** Face-model runs per second; below trackFps when the face runs on alternate ticks. */
   faceFps: number;
   delegate: Delegate | null;
@@ -27,7 +29,7 @@ export interface TrackerStats {
 }
 
 export function createTrackerStats(): TrackerStats {
-  return { trackFps: 0, faceFps: 0, delegate: null, handMs: 0, faceMs: 0, tickMs: 0, alternating: false, hands: 0, face: false };
+  return { trackFps: 0, cameraFps: 0, faceFps: 0, delegate: null, handMs: 0, faceMs: 0, tickMs: 0, alternating: false, hands: 0, face: false };
 }
 
 /** Exponential moving average; the first sample (prev 0) is taken as is. */
