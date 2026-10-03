@@ -46,7 +46,10 @@ export const SETS = frozen({
   LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, NOSE, FILL, MOCAP_POINTS, SUBSET,
 });
 
-export const FLIP_OPTS = Object.freeze({ wQuality: 1, wValence: 0.1, wDihedral: 1 });
+// Tuned 2026-10-03 on the topology sheet (Task 6): the min-angle guard stops the optimizer creating slivers (without it
+// Flip and Flow improved valence and dihedral but worsened the worst angle, slivers and aspect); with the guard on,
+// the old weights (1, 0.1, 1) lost valence share, so quality is weighted down and valence and dihedral up.
+export const FLIP_OPTS = Object.freeze({ wQuality: 0.5, wValence: 0.2, wDihedral: 2, minAngleGuard: 20 });
 export const FLOW_OPTS = Object.freeze({ ...FLIP_OPTS, wFlow: 0.3 });
 const ringOf = (ids) => [...ids, ids[0]];
 /** Edge loops forced into the Flow low mesh, in this order. Only `optional` chains may be dropped. */
