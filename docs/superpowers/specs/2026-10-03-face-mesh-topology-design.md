@@ -1,3 +1,5 @@
+**Outcome (2026-10-03):** Flip shipped (default `--variant flip` in `tools/gen-face-topology.mjs`); Flow and the comparison sheet were removed; Even was not built. See `handoff-log/2026-10-03-face-mesh-topology.md`.
+
 # Face Puppet mesh topology pass: Current, Flip, Flow
 
 Date: 2026-10-03. Status: approved in chat (variants chosen by Grayson), spec for review.
