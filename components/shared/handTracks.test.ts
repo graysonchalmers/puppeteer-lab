@@ -41,4 +41,9 @@ describe('trackHands', () => {
   it('ignores a third hand', () => {
     expect(trackHands([f(0, 0.8, 0.2, 0.5)])[0]).toEqual([0, 1]);
   });
+
+  it('follows a lone hand across the midpoint of the stale positions', () => {
+    const frames = [f(0, 0.8, 0.2), f(20, 0.2), f(40, 0.35), f(60, 0.5), f(80, 0.6)];
+    expect(trackHands(frames)).toEqual([[0, 1], [1], [1], [1], [1]]);
+  });
 });
