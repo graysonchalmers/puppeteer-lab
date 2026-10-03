@@ -13,7 +13,10 @@ import { Projection, toScene, V3 } from './projection';
 import { MeshDetail, FACE_MESHES, createFaceBuffers, updateFaceBuffers, FaceBuffers } from './faceGeometry';
 import { buildCreaseGroups, CreaseGroups } from './creaseGroups';
 import { eyePose } from './eyes';
-import { handRig, HAND_SEGMENTS } from './handRig';
+import { handRigFromScenePoints, HAND_SEGMENTS } from './handRig';
+import { DEFAULT_R, focalPx, placeHandPoints } from './handDepth';
+import { OrbitView } from './orbitState';
+import { orbitCameraPose } from './orbitCamera';
 import {
   CANONICAL_VERTS, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
   LEFT_EYEBROW, RIGHT_EYEBROW,
@@ -31,6 +34,11 @@ const TOOTH_BAND = 0.08;
 const TOOTH_BAND_MAX_HALF_GAP = 0.6;
 const MAX_JOINTS = 42; // 2 hands x 21
 
+export interface SceneView extends OrbitView {
+  /** Fixed pivot of the take (median nose tip, normalized landmark space); null = image center. */
+  pivot: Landmark | null;
+}
+
 export interface SceneInput {
   face: Landmark[] | null;       // boosted (brows, jaw, blink)
   eyeSource: Landmark[] | null;  // boosted brows/jaw but NOT blink: eyeballs must not move when lids close
@@ -39,18 +47,26 @@ export interface SceneInput {
   teethGap: number;
   creaseAngle: number;
   meshDetail: MeshDetail;
+  /** Orbit view; null/undefined = the fixed ortho front view, exactly as before. */
+  view?: SceneView | null;
+  /** Depth ratio r per hand, same order as `hands` (orbit view only). */
+  handR?: number[];
 }
 
-function addLights(scene: THREE.Scene) {
-  // Tuned on the synthetic take: low ambient + a side-ish key so the form reads.
-  scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+function addLights(scene: THREE.Scene): THREE.Group {
+  // Tuned on the synthetic take: low ambient + a side-ish key so the form reads. The rig is rotated with the
+  // orbit camera so an orbited view keeps the same headlight look and is never dark.
+  const rig = new THREE.Group();
+  rig.add(new THREE.AmbientLight(0xffffff, 0.15));
   const key = new THREE.DirectionalLight(0xffffff, 3.2);
   key.position.set(-0.8, 0.6, 0.7);
   const fill = new THREE.DirectionalLight(0xffffff, 0.7);
   fill.position.set(0.8, -0.2, 0.8);
   const rim = new THREE.DirectionalLight(0xffffff, 2.5);
   rim.position.set(0.3, 0.8, -1);
-  scene.add(key, fill, rim);
+  rig.add(key, fill, rim);
+  scene.add(rig);
+  return rig;
 }
 
 function eyeTexture(): THREE.CanvasTexture {
@@ -123,6 +139,9 @@ export class PuppetScene {
   readonly canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer;
   private camera: THREE.OrthographicCamera;
+  private orbitCamera = new THREE.PerspectiveCamera(50, 1, 10, 20000);
+  private faceLights!: THREE.Group;
+  private handLights!: THREE.Group;
   private faceScene = new THREE.Scene();
   private handScene = new THREE.Scene();
   private skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, // vertex colors carry the gray
@@ -151,8 +170,8 @@ export class PuppetScene {
     this.canvas = this.renderer.domElement;
     this.camera = new THREE.OrthographicCamera(0, w, 0, -h, -10000, 10000);
     this.setSize(w, h);
-    addLights(this.faceScene);
-    addLights(this.handScene);
+    this.faceLights = addLights(this.faceScene);
+    this.handLights = addLights(this.handScene);
 
     const tex = eyeTexture();
     for (let i = 0; i < 2; i++) {
@@ -183,6 +202,26 @@ export class PuppetScene {
     this.camera.updateProjectionMatrix();
   }
 
+  /** The capture camera (distance f from the face plane, looking down -z), rotated rigidly about the pivot. */
+  private placeOrbitCamera(view: SceneView, p: Projection): THREE.PerspectiveCamera {
+    const f = focalPx(p.drawW);
+    const stageW = p.drawW + 2 * p.offsetX;
+    const stageH = p.drawH + 2 * p.offsetY;
+    const cx = p.offsetX + p.drawW / 2;
+    const cy = -(p.offsetY + p.drawH / 2);
+    const pivot: V3 = view.pivot ? toScene(view.pivot, p) : [cx, cy, 0];
+    const pose = orbitCameraPose(view, pivot, [cx, cy, f]);
+    const cam = this.orbitCamera;
+    cam.position.set(...pose.position);
+    cam.quaternion.set(...pose.quaternion);
+    cam.fov = (2 * Math.atan(stageH / 2 / f) * 180) / Math.PI;
+    cam.aspect = stageW / stageH;
+    cam.updateProjectionMatrix();
+    this.faceLights.quaternion.copy(cam.quaternion);
+    this.handLights.quaternion.copy(cam.quaternion);
+    return cam;
+  }
+
   private ensureFace(detail: MeshDetail, angle: number) {
     if (this.detail !== detail) {
       if (this.faceMesh) { this.faceScene.remove(this.faceMesh); this.faceMesh.geometry.dispose(); }
@@ -202,6 +241,12 @@ export class PuppetScene {
   }
 
   render(input: SceneInput, p: Projection) {
+    const view = input.view ?? null;
+    const cam: THREE.Camera = view ? this.placeOrbitCamera(view, p) : this.camera;
+    if (!view) {
+      this.faceLights.quaternion.identity();
+      this.handLights.quaternion.identity();
+    }
     const face = input.face && input.face.length >= 468 ? input.face : null;
     this.faceMesh && (this.faceMesh.visible = !!face);
     for (const o of [...this.eyes, ...this.glints, this.cavity, this.teeth, this.toothSeam, this.closedLip, this.lipSeam, this.brows]) o.visible = !!face;
@@ -216,13 +261,13 @@ export class PuppetScene {
       this.updateMouth(face, p, input.mouthOpen, input.teethGap);
       this.updateBrows(face, p);
     }
-    this.updateHands(input.hands, p);
+    this.updateHands(input.hands, p, view ? input.handR ?? [] : null);
 
     this.renderer.setClearColor(BG, 1);
     this.renderer.clear();
-    this.renderer.render(this.faceScene, this.camera);
+    this.renderer.render(this.faceScene, cam);
     this.renderer.clearDepth(); // hands always in front of the face
-    this.renderer.render(this.handScene, this.camera);
+    this.renderer.render(this.handScene, cam);
   }
 
   private updateEyes(lm: Landmark[], p: Projection) {
@@ -282,12 +327,18 @@ export class PuppetScene {
     writeTris(this.brows, tris);
   }
 
-  private updateHands(hands: Landmark[][], p: Projection) {
+  private updateHands(hands: Landmark[][], p: Projection, rs: number[] | null) {
     let b = 0, j = 0;
     const m = this.tmp;
+    const f = focalPx(p.drawW);
+    const cx = p.offsetX + p.drawW / 2;
+    const cy = -(p.offsetY + p.drawH / 2);
     this.palms.forEach((pm) => (pm.visible = false));
-    hands.filter((h) => h && h.length >= 21).slice(0, 2).forEach((hand, hi) => {
-      const rig = handRig(hand, p);
+    hands.slice(0, 2).forEach((hand, hi) => {
+      if (!hand || hand.length < 21) return;
+      let P = hand.map((l) => toScene(l, p));
+      if (rs) P = placeHandPoints(P, rs[hi] ?? DEFAULT_R, cx, cy, f);
+      const rig = handRigFromScenePoints(P);
       for (const s of rig.segments) {
         const dir = new THREE.Vector3(s.b[0] - s.a[0], s.b[1] - s.a[1], s.b[2] - s.a[2]);
         const len = dir.length() || 1e-3;

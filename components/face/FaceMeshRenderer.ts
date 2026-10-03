@@ -11,7 +11,7 @@
 import { Landmark } from '../shared/trackerTypes';
 import { fitProjection, Projection } from './projection';
 import { MeshDetail } from './faceGeometry';
-import { PuppetScene } from './PuppetScene';
+import { PuppetScene, SceneView } from './PuppetScene';
 import { PuppetState, boostBrows, boostJaw, boostBlink, teethGap } from './puppetState';
 import { LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LEFT_EYEBROW, RIGHT_EYEBROW, MOCAP_POINTS } from './faceTopology';
 
@@ -21,6 +21,8 @@ const ACCENT = '#EE3B2B';
 export interface PuppetFrame {
   face: Landmark[] | null;
   hands: Landmark[][];
+  /** Depth ratio r per hand (orbit view only), same order as `hands`. */
+  handR?: number[];
   state: PuppetState;
 }
 
@@ -37,6 +39,8 @@ export interface PuppetOptions {
   /** Crease Angle in degrees, 0..90. */
   creaseAngle: number;
   meshDetail: MeshDetail;
+  /** Orbit view; null/undefined renders the fixed front view exactly as before. */
+  view?: SceneView | null;
 }
 
 const scenes = new WeakMap<HTMLCanvasElement, PuppetScene>();
@@ -128,6 +132,8 @@ export function drawPuppet(ctx: CanvasRenderingContext2D, frame: PuppetFrame, w:
     teethGap: teethGap(frame.state, opts.jawBoost),
     creaseAngle: opts.creaseAngle,
     meshDetail: opts.meshDetail,
+    view: opts.view ?? null,
+    handR: frame.handR,
   }, p);
   ctx.drawImage(scene.canvas, 0, 0, w, h);
   if (face) {
