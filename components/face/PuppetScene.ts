@@ -16,14 +16,13 @@ import { eyePose } from './eyes';
 import { handRigFromScenePoints, HAND_SEGMENTS } from './handRig';
 import { DEFAULT_R, focalPx, placeHandPoints } from './handDepth';
 import { OrbitView } from './orbitState';
+import { Look, LOOKS, shadeOf, LookId } from './looks';
 import { orbitCameraPose } from './orbitCamera';
 import {
   CANONICAL_VERTS, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR, LIPS_INNER, LIPS_INNER_UPPER, LIPS_INNER_LOWER,
   LEFT_EYEBROW, RIGHT_EYEBROW,
 } from './faceTopology';
 
-const BG = 0x090a0c;
-const SKIN_HAND = 0xa3a7ad; // close to the face's SKIN_GRAY after lighting
 const CAVITY = 0x0b0c0e;
 const TOOTH = 0xe6e4dc;
 const TOOTH_SEAM = 0x8e8c85;
@@ -51,20 +50,25 @@ export interface SceneInput {
   view?: SceneView | null;
   /** Depth ratio r per hand, same order as `hands` (orbit view only). */
   handR?: number[];
+  /** Shading/light look; undefined = the default look. */
+  look?: Look;
 }
 
-function addLights(scene: THREE.Scene): THREE.Group {
-  // Tuned on the synthetic take: low ambient + a side-ish key so the form reads. The rig is rotated with the
-  // orbit camera so an orbited view keeps the same headlight look and is never dark.
+function fillRig(rig: THREE.Group, look: Look) {
+  rig.clear();
+  rig.add(new THREE.AmbientLight(look.ambient.color, look.ambient.intensity));
+  if (look.hemisphere) rig.add(new THREE.HemisphereLight(look.hemisphere.sky, look.hemisphere.ground, look.hemisphere.intensity));
+  for (const l of look.lights) {
+    const d = new THREE.DirectionalLight(l.color, l.intensity);
+    d.position.set(...l.pos);
+    rig.add(d);
+  }
+}
+
+function newRig(scene: THREE.Scene): THREE.Group {
+  // The rig is rotated with the orbit camera so an orbited view keeps the same headlight look and is never dark.
+  // The light values come from the active look (tuned on the synthetic take for the default).
   const rig = new THREE.Group();
-  rig.add(new THREE.AmbientLight(0xffffff, 0.15));
-  const key = new THREE.DirectionalLight(0xffffff, 3.2);
-  key.position.set(-0.8, 0.6, 0.7);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.7);
-  fill.position.set(0.8, -0.2, 0.8);
-  const rim = new THREE.DirectionalLight(0xffffff, 2.5);
-  rim.position.set(0.3, 0.8, -1);
-  rig.add(key, fill, rim);
   scene.add(rig);
   return rig;
 }
@@ -140,8 +144,8 @@ export class PuppetScene {
   private renderer: THREE.WebGLRenderer;
   private camera: THREE.OrthographicCamera;
   private orbitCamera = new THREE.PerspectiveCamera(50, 1, 10, 20000);
-  private faceLights!: THREE.Group;
-  private handLights!: THREE.Group;
+  private faceLights: THREE.Group;
+  private handLights: THREE.Group;
   private faceScene = new THREE.Scene();
   private handScene = new THREE.Scene();
   private skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, // vertex colors carry the gray
@@ -162,6 +166,9 @@ export class PuppetScene {
   private jointBalls: THREE.InstancedMesh;
   private palms: THREE.Mesh[] = [];
   private tmp = new THREE.Object3D();
+  private handMat = new THREE.MeshStandardMaterial({ color: LOOKS.default.handColor, roughness: 0.75, metalness: 0 });
+  private look: Look = LOOKS.default;
+  private lookId: LookId | null = null;
 
   constructor(w: number, h: number) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -170,8 +177,8 @@ export class PuppetScene {
     this.canvas = this.renderer.domElement;
     this.camera = new THREE.OrthographicCamera(0, w, 0, -h, -10000, 10000);
     this.setSize(w, h);
-    this.faceLights = addLights(this.faceScene);
-    this.handLights = addLights(this.handScene);
+    this.faceLights = newRig(this.faceScene);
+    this.handLights = newRig(this.handScene);
 
     const tex = eyeTexture();
     for (let i = 0; i < 2; i++) {
@@ -182,17 +189,31 @@ export class PuppetScene {
     }
     this.faceScene.add(this.cavity, this.teeth, this.toothSeam, this.closedLip, this.lipSeam, this.brows);
 
-    const handMat = new THREE.MeshStandardMaterial({ color: SKIN_HAND, roughness: 0.75, metalness: 0 });
-    this.bones = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 12, 1, true), handMat, HAND_SEGMENTS.length * 2);
-    this.jointBalls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), handMat, MAX_JOINTS);
+    this.bones = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 12, 1, true), this.handMat, HAND_SEGMENTS.length * 2);
+    this.jointBalls = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), this.handMat, MAX_JOINTS);
     this.bones.frustumCulled = false;
     this.jointBalls.frustumCulled = false;
     this.handScene.add(this.bones, this.jointBalls);
     for (let i = 0; i < 2; i++) {
-      const palm = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), handMat);
+      const palm = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), this.handMat);
       this.palms.push(palm);
       this.handScene.add(palm);
     }
+    this.applyLook(LOOKS.default);
+  }
+
+  /** Id-gated: a no-op unless the look changed. Rebuilds both light rigs, restyles skin and hands, and forces the face
+   * buffers to be rebuilt (their vertex colors come from the look) on the next face frame. */
+  private applyLook(look: Look) {
+    if (this.lookId === look.id) return;
+    this.lookId = look.id;
+    this.look = look;
+    fillRig(this.faceLights, look);
+    fillRig(this.handLights, look);
+    this.skinMat.roughness = look.roughness;
+    this.handMat.color.setHex(look.handColor);
+    this.handMat.roughness = look.roughness;
+    this.detail = null; // ensureFace rebuilds the buffers with this look's shade
   }
 
   setSize(w: number, h: number) {
@@ -225,7 +246,7 @@ export class PuppetScene {
   private ensureFace(detail: MeshDetail, angle: number) {
     if (this.detail !== detail) {
       if (this.faceMesh) { this.faceScene.remove(this.faceMesh); this.faceMesh.geometry.dispose(); }
-      this.faceBuf = createFaceBuffers(detail);
+      this.faceBuf = createFaceBuffers(detail, shadeOf(this.look));
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(this.faceBuf.positions, 3));
       g.setAttribute('normal', new THREE.BufferAttribute(this.faceBuf.normals, 3));
@@ -241,6 +262,7 @@ export class PuppetScene {
   }
 
   render(input: SceneInput, p: Projection) {
+    this.applyLook(input.look ?? LOOKS.default);
     const view = input.view ?? null;
     const cam: THREE.Camera = view ? this.placeOrbitCamera(view, p) : this.camera;
     if (!view) {
@@ -252,7 +274,8 @@ export class PuppetScene {
     for (const o of [...this.eyes, ...this.glints, this.cavity, this.teeth, this.toothSeam, this.closedLip, this.lipSeam, this.brows]) o.visible = !!face;
 
     if (face) {
-      this.ensureFace(input.meshDetail, input.creaseAngle);
+      const angle = this.look.creaseAngle ?? input.creaseAngle;
+      this.ensureFace(input.meshDetail, angle);
       updateFaceBuffers(this.faceBuf, input.meshDetail, face, p, this.crease.groups!);
       const g = this.faceMesh.geometry;
       g.getAttribute('position').needsUpdate = true;
@@ -263,7 +286,7 @@ export class PuppetScene {
     }
     this.updateHands(input.hands, p, view ? input.handR ?? [] : null);
 
-    this.renderer.setClearColor(BG, 1);
+    this.renderer.setClearColor(this.look.background, 1);
     this.renderer.clear();
     this.renderer.render(this.faceScene, cam);
     this.renderer.clearDepth(); // hands always in front of the face
