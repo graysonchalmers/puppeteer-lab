@@ -31,6 +31,8 @@ const LIP_SEAM = 0x15171b;
 const BROW = 0x16181c;
 const TOOTH_BAND = 0.08;
 const TOOTH_BAND_MAX_HALF_GAP = 0.6;
+/** The outline hull sits this many outline-widths behind the skin so it never pokes through sloped triangles. */
+const OUTLINE_DEPTH = 3;
 const MAX_JOINTS = 42; // 2 hands x 21
 
 export interface SceneView extends OrbitView {
@@ -63,6 +65,16 @@ function fillRig(rig: THREE.Group, look: Look) {
     d.position.set(...l.pos);
     rig.add(d);
   }
+}
+
+function toonGradient(bands: number): THREE.DataTexture {
+  const data = new Uint8Array(bands);
+  for (let i = 0; i < bands; i++) data[i] = Math.round(255 * (0.25 + 0.75 * (i / (bands - 1))));
+  const t = new THREE.DataTexture(data, bands, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
 }
 
 function newRig(scene: THREE.Scene): THREE.Group {
@@ -148,7 +160,7 @@ export class PuppetScene {
   private handLights: THREE.Group;
   private faceScene = new THREE.Scene();
   private handScene = new THREE.Scene();
-  private skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, // vertex colors carry the gray
+  private skinMat: THREE.MeshStandardMaterial | THREE.MeshToonMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, // vertex colors carry the gray
     roughness: 0.75, metalness: 0, vertexColors: true, side: THREE.DoubleSide });
   private faceMesh!: THREE.Mesh;
   private faceBuf!: FaceBuffers;
@@ -166,7 +178,11 @@ export class PuppetScene {
   private jointBalls: THREE.InstancedMesh;
   private palms: THREE.Mesh[] = [];
   private tmp = new THREE.Object3D();
-  private handMat = new THREE.MeshStandardMaterial({ color: LOOKS.default.handColor, roughness: 0.75, metalness: 0 });
+  private handMat: THREE.MeshStandardMaterial | THREE.MeshToonMaterial = new THREE.MeshStandardMaterial({ color: LOOKS.default.handColor, roughness: 0.75, metalness: 0 });
+  private gradient: THREE.DataTexture | null = null;
+  private outlineMesh: THREE.Mesh | null = null;
+  private outlinePos: Float32Array | null = null;
+  private viewDir = new THREE.Vector3();
   private look: Look = LOOKS.default;
   private lookId: LookId | null = null;
 
@@ -210,10 +226,35 @@ export class PuppetScene {
     this.look = look;
     fillRig(this.faceLights, look);
     fillRig(this.handLights, look);
-    this.skinMat.roughness = look.roughness;
-    this.handMat.color.setHex(look.handColor);
-    this.handMat.roughness = look.roughness;
+    this.restyle(look);
     this.detail = null; // ensureFace rebuilds the buffers with this look's shade
+  }
+
+  /** Swaps skin and hand materials to the look's style, disposing the old ones, the toon gradient and the outline. */
+  private restyle(look: Look) {
+    this.skinMat.dispose(); this.handMat.dispose(); this.gradient?.dispose(); this.gradient = null;
+    if (look.skin === 'toon') {
+      this.gradient = toonGradient(look.toonBands);
+      this.skinMat = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: this.gradient, side: THREE.DoubleSide });
+      this.handMat = new THREE.MeshToonMaterial({ color: look.handColor, gradientMap: this.gradient });
+    } else {
+      this.skinMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: look.roughness, metalness: 0, vertexColors: true, side: THREE.DoubleSide });
+      this.handMat = new THREE.MeshStandardMaterial({ color: look.handColor, roughness: look.roughness, metalness: 0 });
+    }
+    if (this.faceMesh) this.faceMesh.material = this.skinMat;
+    this.bones.material = this.handMat;
+    this.jointBalls.material = this.handMat;
+    for (const p of this.palms) p.material = this.handMat;
+    this.removeOutline();
+  }
+
+  private removeOutline() {
+    if (!this.outlineMesh) return;
+    this.faceScene.remove(this.outlineMesh);
+    this.outlineMesh.geometry.dispose();
+    (this.outlineMesh.material as THREE.Material).dispose();
+    this.outlineMesh = null;
+    this.outlinePos = null;
   }
 
   setSize(w: number, h: number) {
@@ -245,6 +286,7 @@ export class PuppetScene {
 
   private ensureFace(detail: MeshDetail, angle: number) {
     if (this.detail !== detail) {
+      this.removeOutline(); // its geometry length belongs to the old mesh detail
       if (this.faceMesh) { this.faceScene.remove(this.faceMesh); this.faceMesh.geometry.dispose(); }
       this.faceBuf = createFaceBuffers(detail, shadeOf(this.look));
       const g = new THREE.BufferGeometry();
@@ -254,6 +296,14 @@ export class PuppetScene {
       this.faceMesh = new THREE.Mesh(g, this.skinMat);
       this.faceMesh.frustumCulled = false;
       this.faceScene.add(this.faceMesh);
+      if (this.look.outline) {
+        this.outlinePos = new Float32Array(this.faceBuf.positions.length);
+        const og = new THREE.BufferGeometry();
+        og.setAttribute('position', new THREE.BufferAttribute(this.outlinePos, 3));
+        this.outlineMesh = new THREE.Mesh(og, new THREE.MeshBasicMaterial({ color: this.look.outline.color, side: THREE.BackSide }));
+        this.outlineMesh.frustumCulled = false;
+        this.faceScene.add(this.outlineMesh);
+      }
       this.detail = detail;
     }
     if (this.crease.detail !== detail || this.crease.angle !== angle) {
@@ -271,12 +321,28 @@ export class PuppetScene {
     }
     const face = input.face && input.face.length >= 468 ? input.face : null;
     this.faceMesh && (this.faceMesh.visible = !!face);
+    if (this.outlineMesh) this.outlineMesh.visible = !!face;
     for (const o of [...this.eyes, ...this.glints, this.cavity, this.teeth, this.toothSeam, this.closedLip, this.lipSeam, this.brows]) o.visible = !!face;
 
     if (face) {
       const angle = this.look.creaseAngle ?? input.creaseAngle;
       this.ensureFace(input.meshDetail, angle);
       updateFaceBuffers(this.faceBuf, input.meshDetail, face, p, this.crease.groups!);
+      if (this.outlineMesh && this.outlinePos && this.look.outline) {
+        // The mirrored mesh winds back-facing, so BackSide draws the face's own triangles: the hull must sit behind the
+        // skin. Push out perpendicular to the view direction (so only the rim shows) and back along it.
+        const f = this.viewDir;
+        if (view) cam.getWorldDirection(f); else f.set(0, 0, -1);
+        const w = this.look.outline.width, P = this.faceBuf.positions, N = this.faceBuf.normals, O = this.outlinePos;
+        const back = w * OUTLINE_DEPTH;
+        for (let i = 0; i < P.length; i += 3) {
+          const nf = N[i] * f.x + N[i + 1] * f.y + N[i + 2] * f.z;
+          O[i] = P[i] + (N[i] - nf * f.x) * w + f.x * back;
+          O[i + 1] = P[i + 1] + (N[i + 1] - nf * f.y) * w + f.y * back;
+          O[i + 2] = P[i + 2] + (N[i + 2] - nf * f.z) * w + f.z * back;
+        }
+        this.outlineMesh.geometry.getAttribute('position').needsUpdate = true;
+      }
       const g = this.faceMesh.geometry;
       g.getAttribute('position').needsUpdate = true;
       g.getAttribute('normal').needsUpdate = true;
