@@ -52,6 +52,21 @@ describe('stepPuppetState', () => {
     for (let i = 0; i < 40; i++) s = stepPuppetState(s, face(), bs, 1);
     expect(s.brows[0]).toBeCloseTo(1, 3);
   });
+
+  it('opens the mouth and parts the teeth for speech-sized jawOpen with a small lip gap', () => {
+    let s = INITIAL_PUPPET_STATE;
+    for (let i = 0; i < 5; i++) s = stepPuppetState(s, face(0.008), { jawOpen: 0.1 }, 1); // lip ratio 0.04
+    expect(s.mouthOpen).toBe(true);
+    expect(teethGap(s, 1)).toBeGreaterThan(0);
+    expect(boostJaw(face(0.008), s, 1, 1)).not.toEqual(face(0.008));
+  });
+
+  it('keeps a resting mouth shut', () => {
+    let s = INITIAL_PUPPET_STATE;
+    for (let i = 0; i < 5; i++) s = stepPuppetState(s, face(0.002), { jawOpen: 0.02 }, 1);
+    expect(s.mouthOpen).toBe(false);
+    expect(teethGap(s, 1)).toBe(0);
+  });
 });
 
 describe('brow sides (verified on camera 2026-09-22)', () => {

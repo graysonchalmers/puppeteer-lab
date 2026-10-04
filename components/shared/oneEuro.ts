@@ -13,6 +13,8 @@ export interface OneEuroParams {
   minCutoff: number; // Hz, smoothing at rest (lower = smoother, more lag)
   beta: number;      // speed coefficient (higher = less lag when moving)
   dCutoff: number;   // Hz, cutoff for the derivative estimate
+  /** Optional lighter filtering for some points (the lips: speech is small and fast). */
+  fast?: { points: readonly number[]; minCutoffScale: number; dCutoff: number };
 }
 
 export const FACE_ONE_EURO_DEFAULTS: OneEuroParams = { minCutoff: 0.5, beta: 40, dCutoff: 1 };
@@ -38,6 +40,8 @@ export function createOneEuroBank(params: OneEuroParams = { ...FACE_ONE_EURO_DEF
   let x: Float64Array | null = null;  // filtered values, 3 per point
   let dx: Float64Array | null = null; // filtered derivatives
   let lastT = 0;
+  let fastMask: Uint8Array | null = null;
+  let fastMaskFor: OneEuroParams['fast'] | null = null;
 
   const bank: OneEuroBank = {
     params,
@@ -61,22 +65,29 @@ export function createOneEuroBank(params: OneEuroParams = { ...FACE_ONE_EURO_DEF
 
       const dtS = Math.max(1e-3, (tMs - lastT) / 1000);
       lastT = tMs;
-      const { minCutoff, beta, dCutoff } = bank.params;
+      const { minCutoff, beta, dCutoff, fast } = bank.params;
+      if (fast && (fastMaskFor !== fast || fastMask!.length !== points.length)) {
+        fastMask = new Uint8Array(points.length);
+        for (const i of fast.points) if (i < points.length) fastMask[i] = 1;
+        fastMaskFor = fast;
+      }
       const aD = smoothingFactor(dCutoff, dtS);
+      const aDFast = fast ? smoothingFactor(fast.dCutoff, dtS) : aD;
+      const minFast = fast ? minCutoff * fast.minCutoffScale : minCutoff;
 
       const out: Landmark[] = new Array(points.length);
+      const step = (k: number, raw: number, ad: number, mc: number) => {
+        dx![k] += ad * ((raw - x![k]) / dtS - dx![k]);
+        x![k] += smoothingFactor(mc + beta * Math.abs(dx![k]), dtS) * (raw - x![k]);
+        return x![k];
+      };
       for (let i = 0; i < points.length; i++) {
-        const raw = [points[i].x, points[i].y, points[i].z];
-        const res = [0, 0, 0];
-        for (let c = 0; c < 3; c++) {
-          const k = i * 3 + c;
-          const d = (raw[c] - x[k]) / dtS;
-          dx[k] = dx[k] + aD * (d - dx[k]);
-          const a = smoothingFactor(minCutoff + beta * Math.abs(dx[k]), dtS);
-          x[k] = x[k] + a * (raw[c] - x[k]);
-          res[c] = x[k];
-        }
-        out[i] = { x: res[0], y: res[1], z: res[2] };
+        const isFast = fast !== undefined && fastMask![i] === 1;
+        const ad = isFast ? aDFast : aD;
+        const mc = isFast ? minFast : minCutoff;
+        const p = points[i];
+        const k = i * 3;
+        out[i] = { x: step(k, p.x, ad, mc), y: step(k + 1, p.y, ad, mc), z: step(k + 2, p.z, ad, mc) };
       }
       return out;
     },

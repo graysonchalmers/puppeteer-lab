@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, it, expect } from 'vitest';
-import { mouthOpenRatio, nextMouthOpen, MOUTH_OPEN_ABOVE, MOUTH_CLOSE_BELOW } from './mouthState';
+import { mouthOpenRatio, nextMouthOpen, MOUTH_OPEN_ABOVE, MOUTH_CLOSE_BELOW, JAW_OPEN_ABOVE, JAW_CLOSE_BELOW } from './mouthState';
 
 // 478 landmarks, all at the center, with the four mouth points placed.
 const face = (gap: number, width: number, cx = 0.5, cy = 0.6) => {
@@ -39,5 +39,14 @@ describe('nextMouthOpen', () => {
   it('closes only below the lower threshold', () => {
     expect(nextMouthOpen(true, mid)).toBe(true);
     expect(nextMouthOpen(true, MOUTH_CLOSE_BELOW - 0.001)).toBe(false);
+  });
+  it('opens on a speech-sized jawOpen even when the lip ratio stays small', () => {
+    expect(nextMouthOpen(false, 0.03, 0.1)).toBe(true);
+    expect(nextMouthOpen(false, 0.03, JAW_OPEN_ABOVE - 0.001)).toBe(false);
+  });
+  it('stays shut at a resting jawOpen and closes only when lips and jaw are both shut', () => {
+    expect(nextMouthOpen(false, 0.01, 0.02)).toBe(false);
+    expect(nextMouthOpen(true, 0.01, JAW_CLOSE_BELOW + 0.001)).toBe(true);
+    expect(nextMouthOpen(true, 0.01, JAW_CLOSE_BELOW - 0.001)).toBe(false);
   });
 });

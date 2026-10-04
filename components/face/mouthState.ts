@@ -26,6 +26,17 @@ export function mouthOpenRatio(lm: Landmark[], videoAspect: number): number {
   return d(lm[UPPER_INNER_LIP], lm[LOWER_INNER_LIP]) / width;
 }
 
-export function nextMouthOpen(wasOpen: boolean, ratio: number): boolean {
-  return wasOpen ? ratio >= MOUTH_CLOSE_BELOW : ratio > MOUTH_OPEN_ABOVE;
+/** Raw jawOpen blendshape gate. Speech reads 0.05-0.2 while the lip ratio,
+ * measured on smoothed landmarks, often stays under MOUTH_OPEN_ABOVE. A closed
+ * mouth reads 0.005-0.02 (Grayson's 2026-09-22 take), so these sit above it. */
+export const JAW_OPEN_ABOVE = 0.06;
+export const JAW_CLOSE_BELOW = 0.03;
+
+/** Open when the lips part OR the jaw drops; closed only when both are shut.
+ * `jawOpen` is undefined for takes without blendshapes (lip ratio only). */
+export function nextMouthOpen(wasOpen: boolean, ratio: number, jawOpen?: number): boolean {
+  const jaw = jawOpen ?? 0;
+  return wasOpen
+    ? ratio >= MOUTH_CLOSE_BELOW || jaw >= JAW_CLOSE_BELOW
+    : ratio > MOUTH_OPEN_ABOVE || jaw > JAW_OPEN_ABOVE;
 }

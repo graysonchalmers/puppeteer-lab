@@ -73,6 +73,22 @@ describe('createOneEuroBank', () => {
     expect(bank.filter(pt(0.9), 2 * FRAME_MS)[0].x).toBe(0.9);
   });
 
+  it('passes speech-band motion more on `fast` points (lips) than on the rest', () => {
+    // 4 Hz, 0.012-normalized lip gap (about 5 mm on a face half the frame tall) at 30 fps.
+    const bank = createOneEuroBank({ ...FACE_ONE_EURO_DEFAULTS, fast: { points: [1], minCutoffScale: 6, dCutoff: 2 } });
+    const amp = 0.012;
+    const lo = [1, 1], hi = [0, 0];
+    for (let i = 0; i <= 180; i++) {
+      const t = i / 30;
+      const v = 0.5 + (amp * (1 - Math.cos(8 * Math.PI * t))) / 2;
+      const out = bank.filter([{ x: v, y: 0, z: 0 }, { x: v, y: 0, z: 0 }], t * 1000);
+      if (t > 2) out.forEach((p, k) => { lo[k] = Math.min(lo[k], p.x); hi[k] = Math.max(hi[k], p.x); });
+    }
+    const gain = (k: number) => (hi[k] - lo[k]) / amp;
+    expect(gain(0)).toBeLessThan(0.45);  // head filter: about a third
+    expect(gain(1)).toBeGreaterThan(0.6); // lips: about two thirds
+  });
+
   it('filters x, y and z independently and keeps array length', () => {
     const bank = createOneEuroBank();
     const out = bank.filter([{ x: 0.1, y: 0.2, z: 0.3 }, { x: 0.4, y: 0.5, z: 0.6 }], 0);

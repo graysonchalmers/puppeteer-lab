@@ -105,11 +105,11 @@ const Player: React.FC<{ id: string; take: Loaded }> = ({ id, take }) => {
       const frames = framesRef.current;
       const idx = findFrameIndex(frames, t);
       const frame = frames[idx];
-      stateRef.current = stepPuppetState(stateRef.current, frame.faceLandmarks, frame.blendshapes || {}, take.aspect, 0.5);
+      stateRef.current = stepPuppetState(stateRef.current, frame.faceLandmarks, frame.blendshapes || {}, take.aspect, 1);
       const orbiting = orbitOnRef.current;
       drawPuppet(ctx, { face: frame.faceLandmarks ?? null, hands: frame.landmarks ?? [], state: stateRef.current, handR: orbiting ? depthRef.current.handR[idx] : undefined }, canvas.width, canvas.height, {
         showGazeRays: false, showMocapDots: false, videoAspect: take.aspect,
-        browBoost: 0.5, jawBoost: 0.75, blinkBoost: 0.5, creaseAngle: 90, meshDetail: 'low',
+        browBoost: 1, jawBoost: 1, blinkBoost: 1, creaseAngle: 90, meshDetail: 'low',
         view: orbiting ? { ...orbitViewRef.current, pivot: depthRef.current.pivot } : null,
       });
       raf = requestAnimationFrame(draw);

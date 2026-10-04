@@ -19,6 +19,7 @@ import { pipDims } from './face/pipSize';
 import { createFpsMeter } from './shared/fpsMeter';
 import { Facing } from '../hooks/cameraSupport';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
+import { JAW_OPEN_ABOVE } from './face/mouthState';
 import { frameToCapture } from './face/captureFrame';
 import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder, findFrameIndex } from '../hooks/useRecorder';
@@ -86,9 +87,9 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   } = useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing, enabled: started, audio: askForMic });
   const error = modelError; // camera problems have their own card (cameraIssue)
   const soundOn = micStatus === 'on';
-  const [browBoost, setBrowBoost] = useState(0.5);
-  const [jawBoost, setJawBoost] = useState(0.75);
-  const [blinkBoost, setBlinkBoost] = useState(0.5);
+  const [browBoost, setBrowBoost] = useState(1);
+  const [jawBoost, setJawBoost] = useState(1);
+  const [blinkBoost, setBlinkBoost] = useState(1);
   const [creaseAngle, setCreaseAngle] = useState(90);
   const [meshDetail, setMeshDetail] = useState<MeshDetail>('low');
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);
@@ -767,7 +768,7 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
                      <div className="bg-[#111317] p-2 rounded border border-white/5">
                          <div className="text-gray-500 text-[9px]">MOUTH CAVITY</div>
                          <div className="text-white font-bold mt-0.5">
-                             {(blendshapes['jawOpen'] || 0) > 0.25 ? "SPEAKING" : "RESTING"}
+                             {(blendshapes['jawOpen'] || 0) > JAW_OPEN_ABOVE ? "SPEAKING" : "RESTING"}
                          </div>
                      </div>
                  </div>

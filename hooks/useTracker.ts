@@ -29,8 +29,9 @@ import { HandLandmarker, FaceLandmarker, FilesetResolver } from '@mediapipe/task
 import { MEDIAPIPE_WASM_PATH, HAND_MODEL_PATH, FACE_MODEL_PATH } from './mediapipeAssets';
 import { buildFrame } from '../components/shared/buildFrame';
 import { smoothingToLerp } from '../components/shared/smoothing';
-import { createOneEuroBank, faceSmoothingToMinCutoff } from '../components/shared/oneEuro';
-import { updateAvgDt, nextFaceAlternating } from '../components/shared/facePolicy';
+import { createOneEuroBank, faceSmoothingToMinCutoff, FACE_ONE_EURO_DEFAULTS } from '../components/shared/oneEuro';
+import { LIPS_OUTER, LIPS_INNER } from '../components/face/faceTopology';
+import { updateAvgDt, nextAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
 import { createFpsMeter } from '../components/shared/fpsMeter';
 import { createTrackerStats, createTickHistory, ema, TrackerStats } from '../components/shared/trackerStats';
@@ -73,6 +74,9 @@ export interface UseTrackerOptions {
 
 /** How long a muted camera track may stay muted before it counts as lost (backgrounding mutes briefly, then unmutes). */
 const MUTE_GRACE_MS = 2500;
+/** Lips filter 6x lighter than the rest of the face (3 Hz at the default slider): the head filter passed
+ * only about a third of 4 Hz speech motion; this passes about two thirds (sim, teardown 2026-10-04). */
+const LIP_FILTER = { points: [...LIPS_OUTER, ...LIPS_INNER], minCutoffScale: 6, dCutoff: 2 };
 
 export function useTracker(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -94,7 +98,7 @@ export function useTracker(
     smoothingAlpha: smoothingToLerp(options.smoothing ?? 0.6),
     confidence: options.confidence ?? 0.5,
   });
-  const faceFilterRef = useRef(createOneEuroBank());
+  const faceFilterRef = useRef(createOneEuroBank({ ...FACE_ONE_EURO_DEFAULTS, fast: LIP_FILTER }));
   const facingRef = useRef<Facing>(facing);
   facingRef.current = facing;
   const audioWantedRef = useRef(audio);
@@ -187,7 +191,7 @@ export function useTracker(
     };
     let isActive = true;
     const meter = createFpsMeter();
-    const faceMeter = createFpsMeter();
+    const handMeter = createFpsMeter();
     statsRef.current = createTrackerStats(); // a fresh run starts from zero, but keeps writing into one object
 
     const closeAll = () => {
@@ -230,6 +234,7 @@ export function useTracker(
     let lastNow = 0;
     let avgDt = 0;
     let alternating = false;
+    let lastVideoTime = -1; // detect each camera frame once: rAF can outpace the camera
 
     /** Frames start only when the models AND the camera are both ready (they load in parallel). */
     const tryGo = () => {
@@ -238,6 +243,7 @@ export function useTracker(
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       frameRef.current = null;
       lastNow = 0; // the reopen gap must not inflate avgDt
+      lastVideoTime = -1;
       faceFilterRef.current.reset();
       setIsReady(true);
       setStatus('live');
@@ -524,19 +530,20 @@ export function useTracker(
       const faceLm = faceLandmarkerRef.current;
 
       const video = videoRef.current;
-      if (video.videoWidth > 0 && video.videoHeight > 0) {
+      if (video.videoWidth > 0 && video.videoHeight > 0 && video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
         const now = performance.now();
         if (lastNow) avgDt = updateAvgDt(avgDt, now - lastNow);
         lastNow = now;
-        alternating = nextFaceAlternating(alternating, avgDt, !!handLm && !!faceLm);
-        const runFace = !!faceLm && (!alternating || tickIndex % 2 === 0);
+        alternating = nextAlternating(alternating, avgDt, !!handLm && !!faceLm);
+        const runHand = !!handLm && (!alternating || tickIndex % 2 === 0);
         tickIndex++;
 
         try {
           const t0 = performance.now();
-          const handResult = handLm ? handLm.detectForVideo(video, now) : null;
+          const handResult = runHand ? handLm!.detectForVideo(video, now) : null;
           const t1 = performance.now();
-          const faceResult = runFace ? faceLm!.detectForVideo(video, now) : null;
+          const faceResult = faceLm ? faceLm.detectForVideo(video, now) : null;
           const t2 = performance.now();
           const prev = frameRef.current;
           const next = buildFrame(prev, handResult, faceResult, now, {
@@ -544,17 +551,17 @@ export function useTracker(
             smoothingAlpha: settingsRef.current.smoothingAlpha,
             faceFilter: faceFilterRef.current,
           });
-          if (faceLm && !runFace && prev) next.face = prev.face; // alternate tick: reuse
+          if (handLm && !runHand && prev) { next.hands = prev.hands; next.left = prev.left; next.right = prev.right; } // alternate tick: reuse
           frameRef.current = next;
           const st = statsRef.current;
           st.trackFps = meter.tick(now);
-          if (handLm) st.handMs = ema(st.handMs, t1 - t0);
-          if (runFace) { st.faceMs = ema(st.faceMs, t2 - t1); st.faceFps = faceMeter.tick(now); }
+          if (runHand) { st.handMs = ema(st.handMs, t1 - t0); st.handFps = handMeter.tick(now); }
+          if (faceLm) st.faceMs = ema(st.faceMs, t2 - t1);
           st.tickMs = ema(st.tickMs, performance.now() - t0);
           st.alternating = alternating;
           st.hands = next.hands.length;
           st.face = !!next.face;
-          historyRef.current.push({ ms: performance.now() - t0, hands: next.hands.length, faceRan: runFace });
+          historyRef.current.push({ ms: performance.now() - t0, hands: next.hands.length, handRan: runHand });
           if (next.hands.length > 0) poke(); // playing with your hands is using the app
         } catch (e) {
           console.warn('Detection failed this frame', e);

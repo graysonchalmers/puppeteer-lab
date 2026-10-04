@@ -93,7 +93,7 @@ export function stepPuppetState(
 ): PuppetState {
   if (!lm) return prev;
   const ratio = mouthOpenRatio(lm, videoAspect);
-  const mouthOpen = nextMouthOpen(prev.mouthOpen, ratio);
+  const mouthOpen = nextMouthOpen(prev.mouthOpen, ratio, bs?.jawOpen);
   // No blendshapes (old takes): estimate the jaw from the lip gap.
   const jaw = bs?.jawOpen ?? Math.max(0, Math.min(1, (ratio - 0.05) * 1.5));
   const [a, b] = BLENDSHAPE_SIDES_SWAPPED ? ['Left', 'Right'] as const : ['Right', 'Left'] as const;
