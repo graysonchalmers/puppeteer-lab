@@ -31,7 +31,7 @@ import { buildFrame } from '../components/shared/buildFrame';
 import { smoothingToLerp } from '../components/shared/smoothing';
 import { createOneEuroBank, faceSmoothingToMinCutoff, FACE_ONE_EURO_DEFAULTS } from '../components/shared/oneEuro';
 import { LIPS_OUTER, LIPS_INNER } from '../components/face/faceTopology';
-import { updateAvgDt, nextAlternating } from '../components/shared/facePolicy';
+import { nextAlternating } from '../components/shared/facePolicy';
 import { TrackedFrame } from '../components/shared/trackerTypes';
 import { createFpsMeter } from '../components/shared/fpsMeter';
 import { createTrackerStats, createTickHistory, ema, TrackerStats } from '../components/shared/trackerStats';
@@ -231,10 +231,10 @@ export function useTracker(
     };
 
     let tickIndex = 0;
-    let lastNow = 0;
-    let avgDt = 0;
     let alternating = false;
     let lastVideoTime = -1; // detect each camera frame once: rAF can outpace the camera
+    let lastDetectAt = 0;
+    let dedupe = true; // off for a stream whose currentTime never advances, so tracking cannot stall
 
     /** Frames start only when the models AND the camera are both ready (they load in parallel). */
     const tryGo = () => {
@@ -242,8 +242,9 @@ export function useTracker(
       // A new stream: drop smoothing history so the first frame does not lerp from the old camera.
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       frameRef.current = null;
-      lastNow = 0; // the reopen gap must not inflate avgDt
       lastVideoTime = -1;
+      lastDetectAt = 0;
+      dedupe = true;
       faceFilterRef.current.reset();
       setIsReady(true);
       setStatus('live');
@@ -530,12 +531,13 @@ export function useTracker(
       const faceLm = faceLandmarkerRef.current;
 
       const video = videoRef.current;
-      if (video.videoWidth > 0 && video.videoHeight > 0 && video.currentTime !== lastVideoTime) {
+      const now = performance.now();
+      const fresh = video.currentTime !== lastVideoTime;
+      if (!fresh && dedupe && lastDetectAt && now - lastDetectAt > 500) dedupe = false;
+      if (video.videoWidth > 0 && video.videoHeight > 0 && (fresh || !dedupe)) {
         lastVideoTime = video.currentTime;
-        const now = performance.now();
-        if (lastNow) avgDt = updateAvgDt(avgDt, now - lastNow);
-        lastNow = now;
-        alternating = nextAlternating(alternating, avgDt, !!handLm && !!faceLm);
+        lastDetectAt = now;
+        alternating = nextAlternating(alternating, statsRef.current.handMs + statsRef.current.faceMs, !!handLm && !!faceLm);
         const runHand = !!handLm && (!alternating || tickIndex % 2 === 0);
         tickIndex++;
 
