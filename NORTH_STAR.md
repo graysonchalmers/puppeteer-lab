@@ -18,7 +18,7 @@ Everything in the repo serves one of these. A feature that serves none is backlo
 
 | Verb | Means | Today's proof |
 |---|---|---|
-| **Track** | Turn a webcam frame into hand (and face) landmarks with confidence, handedness, and world-space positions, smoothly | `hooks/useMediaPipe.ts`, `hooks/useFaceTracker.ts`, `components/shared/` |
+| **Track** | Turn a webcam frame into hand (and face) landmarks with confidence, handedness, and world-space positions, smoothly | `hooks/useTracker.ts`, `components/shared/` |
 | **Drive** | Make something respond to the tracked frame: a line, a saber, a puppet, a cube | Air Canvas, Tempo Strike, Hand Telemetry's cube, Face Puppet |
 | **Save** | Record the frame stream with audio, replay it, export it, open it somewhere real | `hooks/useRecorder.ts`, Motion Recorder, Face Puppet replay |
 
@@ -41,7 +41,7 @@ A friend clones the repo, runs two commands, allows the camera, and within ten m
 
 On hotel wifi. With no step that requires Grayson in the room.
 
-Nothing in the repo passes this test yet: (d) has no importer, and the app needs four CDNs to start. That gap is the roadmap in [PLANNING.md](PLANNING.md).
+Nothing in the repo passes this test yet: the Blender importer exists (`tools/blender_import_recording.py`), but Tailwind and the Tempo Strike song still load from CDNs, so it fails on hotel wifi. That gap is the roadmap in [PLANNING.md](PLANNING.md).
 
 ## Principles
 
@@ -49,7 +49,7 @@ Nothing in the repo passes this test yet: (d) has no importer, and the app needs
 - **One frame shape.** Every consumer reads the same `TrackedFrame`. Two representations of a hand is how the smoothing slider ended up wired to nothing ([teardown F1](docs/TEARDOWN-2026-09-06.md)).
 - **Demos are thin.** A demo is one way to consume the frame plus UI. Logic that two demos want lives in the core.
 - **Offline by default.** Models, WASM, CSS, and audio ship with the build. A CDN is an optimization, not a dependency.
-- **Show, don't claim.** Nothing goes on a hub card until it exists and has been camera-verified in real Chrome. The in-app preview browser has no camera and no WebGL; it can only prove mount.
+- **Show, don't claim.** Nothing goes on a hub card until it exists and has been camera-verified in real Chrome. Automated browsers have WebGL but no real face on camera; they prove mount, layout and playback, not live tracking.
 - **Pure math is tested; the camera path is host-verified.** Keep the pure layer (`resolveHands`, smoothing, `lineReliability`, gestures) pure so vitest covers it. Keep a written host-verification checklist for the rest.
 - **Export opens somewhere real.** An export format without an importer for at least one tool is a checkbox, not a feature.
 

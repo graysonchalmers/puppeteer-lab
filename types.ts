@@ -70,21 +70,10 @@ export interface FrameData {
     blendshapes?: Record<string, number>;
 }
 
-export interface RecordingSession {
-    version: string;
-    date: string;
-    type: TrackingType;
-    duration: number; // Seconds
-    frames: FrameData[];
-    audioBase64?: string; // Synchronized audio data URL (data:audio/webm;base64,...)
-    audioMimeType?: string;
-    hasAudio?: boolean;
-}
-
 // --- V3 RECORDING SCHEMA ---
 // See docs/tdd/TDD-002-recording-schema-and-export.md and
 // docs/superpowers/plans/2026-09-16-item6-schema-v3-blender-importer.md.
-// Added alongside FrameData/RecordingSession above, not replacing them: the
+// Added alongside FrameData above, not replacing them: the
 // live recording buffer in useRecorder.ts stays FrameData[] end to end. The
 // v3 shape exists only at the export/import boundary, built and read by
 // components/shared/recordingSchema.ts.

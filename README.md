@@ -8,7 +8,7 @@
 1. **Hand Telemetry**: what the camera sees. Skeleton, confidence gate, inter-hand distances, smoothing, a pinch-grabbable 3D cube, and a landmark recorder.
 2. **Air Canvas**: drive a 2D thing. Pinch to draw glowing lines, grab and move them with the other hand, dwell to undo or clear, with a Line Reliability control that bridges tracking dropouts.
 3. **Tempo Strike**: drive 3D things in a game loop. Your hands become two sabers; slice beats in time with the music; velocity scores.
-4. **Motion Recorder**: save it out. Record hand motion with microphone audio, replay it in a 3D void you can orbit, export as JSON or WebM. (Scrubbing and skeleton replay are next; see the roadmap.)
+4. **Motion Recorder**: save it out. Record hand motion with microphone audio, replay it in a 3D void you can orbit, export as JSON or WebM. Scrub with the timeline. (Skeleton replay is still on the roadmap.)
 5. **Face Puppet**: same pattern, different model. A stylized puppet driven by 478 landmarks and 52 blendshapes, with recorded voice replay.
 
 ## Start here
@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` in desktop Chrome, allow the camera (and the microphone for the recorder demos), and pick a demo from the hub. Tracking initializes in a few seconds. Today the app fetches the MediaPipe WASM and models from a CDN on first load; vendoring them so the build runs offline is roadmap item 3.
+Open `http://localhost:3000` in desktop Chrome, allow the camera (and the microphone for the recorder demos), and the app opens on Face Puppet (the menu lists the other demos). Tracking initializes in a few seconds. The MediaPipe WASM and models ship with the build (`npm install` vendors them); Tailwind and the Tempo Strike song still load from CDNs, so the app is not fully offline yet.
 
 ## How to verify
 
@@ -38,7 +38,7 @@ npm run build
 npm run smoke
 ```
 
-CI runs the same four steps on every push. They prove types, the pure math (hand assignment, smoothing, line reliability), the bundle, and that no secret leaks into `dist/`. They cannot prove tracking: the automated preview has no camera and no WebGL. Anything hand-driven is verified by a person in real Chrome and the result is written in `HANDOFF.md`.
+CI runs the same four steps on every push. They prove types, the pure math (hand assignment, smoothing, line reliability), the bundle, and that no secret leaks into `dist/`. They cannot prove tracking: the automated browsers have WebGL but only a fake camera (no face). Anything hand-driven is verified by a person in real Chrome and the result is written in `HANDOFF.md`.
 
 ## Technical Guide
 
@@ -55,7 +55,7 @@ This guide explains how the tracking layer works so you can replicate it in your
 
 ### 2. Architecture
 
-The tracking logic is encapsulated in a custom React hook (`hooks/useMediaPipe.ts`). This separates the computer vision logic from the UI and Game Loop.
+The tracking logic lives in one React hook (`hooks/useTracker.ts`, which emits a `TrackedFrame`); `hooks/useMediaPipe.ts` is a thin adapter the older hand demos still read through. This separates the computer vision logic from the UI and Game Loop.
 
 #### Data Flow
 
@@ -67,41 +67,13 @@ The tracking logic is encapsulated in a custom React hook (`hooks/useMediaPipe.t
 
 ### 3. Implementation Details
 
-#### Initialization (`hooks/useMediaPipe.ts`)
+#### Initialization (`hooks/useTracker.ts`)
 
-You must load the WASM binaries and the model asset.
-
-```typescript
-const vision = await FilesetResolver.forVisionTasks(
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
-);
-
-const landmarker = await HandLandmarker.createFromOptions(vision, {
-  baseOptions: {
-    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-    delegate: "GPU" // Critical for performance
-  },
-  runningMode: "VIDEO",
-  numHands: 2,
-  minHandDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
-});
-```
+The WASM and the `.task` models are vendored into `public/` by `npm install` (`scripts/vendor-assets.mjs`; paths in `hooks/mediapipeAssets.ts`). The hand and face landmarkers load in `VIDEO` mode, GPU delegate first with a CPU fallback, while the camera permission prompt is already up.
 
 #### The Detection Loop
 
-We do not use `useState` for the loop because it triggers React reconciliation, which is too slow for a high-speed rhythm game. Instead, we use a recursive `requestAnimationFrame` function.
-
-```typescript
-const predictWebcam = () => {
-    let startTimeMs = performance.now();
-    if (landmarkerRef.current && videoRef.current) {
-        const results = landmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
-        processResults(results); // Logic to update Refs
-    }
-    requestAnimationFrame(predictWebcam);
-};
-```
+A `requestAnimationFrame` loop detects **once per new camera frame** (it skips ticks where `video.currentTime` has not advanced) and writes one `TrackedFrame` to a ref, so React never re-renders per frame. Face landmarks go through a One Euro filter (lips filtered lighter, so speech survives). When both models run and their cost no longer fits a 30 fps frame, the hands run on alternate ticks and the face keeps full rate. `?debug` or the DEBUG toggle shows the live numbers.
 
 #### Coordinate Mapping (2D to 3D)
 

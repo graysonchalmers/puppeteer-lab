@@ -20,6 +20,7 @@ import { createFpsMeter } from './shared/fpsMeter';
 import { Facing } from '../hooks/cameraSupport';
 import { INITIAL_PUPPET_STATE, stepPuppetState } from './face/puppetState';
 import { JAW_OPEN_ABOVE } from './face/mouthState';
+import { parseFacePrefs, DEFAULT_FACE_PREFS, FACE_PREFS_STORAGE_KEY } from './face/facePrefs';
 import { frameToCapture } from './face/captureFrame';
 import { viewFrame } from './shared/mirrorFrame';
 import { useRecorder, findFrameIndex } from '../hooks/useRecorder';
@@ -59,7 +60,10 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pipCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [faceSmoothing, setFaceSmoothing] = useState(0.5);
+  const [savedPrefs] = useState(() => {
+    try { return parseFacePrefs(localStorage.getItem(FACE_PREFS_STORAGE_KEY)); } catch { return { ...DEFAULT_FACE_PREFS }; }
+  });
+  const [faceSmoothing, setFaceSmoothing] = useState(savedPrefs.faceSmoothing);
   const [facing, setFacing] = useState<Facing>('user');
 
   // Permission flow: the camera (and, if wanted, the microphone in the SAME request) starts from one tap on the
@@ -87,9 +91,12 @@ const FaceDemo: React.FC<FaceDemoProps> = ({ onSelectMode }) => {
   } = useTracker(videoRef, { hands: true, face: true, faceSmoothing, facing, enabled: started, audio: askForMic });
   const error = modelError; // camera problems have their own card (cameraIssue)
   const soundOn = micStatus === 'on';
-  const [browBoost, setBrowBoost] = useState(1);
-  const [jawBoost, setJawBoost] = useState(1);
-  const [blinkBoost, setBlinkBoost] = useState(1);
+  const [browBoost, setBrowBoost] = useState(savedPrefs.browBoost);
+  const [jawBoost, setJawBoost] = useState(savedPrefs.jawBoost);
+  const [blinkBoost, setBlinkBoost] = useState(savedPrefs.blinkBoost);
+  useEffect(() => {
+    try { localStorage.setItem(FACE_PREFS_STORAGE_KEY, JSON.stringify({ faceSmoothing, browBoost, jawBoost, blinkBoost })); } catch {}
+  }, [faceSmoothing, browBoost, jawBoost, blinkBoost]);
   const [creaseAngle, setCreaseAngle] = useState(90);
   const [meshDetail, setMeshDetail] = useState<MeshDetail>('low');
   const puppetStateRef = useRef(INITIAL_PUPPET_STATE);

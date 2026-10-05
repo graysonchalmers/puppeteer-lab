@@ -14,6 +14,9 @@ import uses `SequenceEditor.strips`, which was renamed from `.sequences` in
 Blender 4.4; a fallback to `.sequences` is included for older versions but
 has not been tested.
 
+**Face Puppet Pack exports are a zip.** Unzip it first and point the importer
+at the `recording.json` inside (the other files are the video and audio).
+
 ## Running it
 
 ### From Blender's Text Editor
