@@ -1,6 +1,6 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-10-04 19:05 CT (final wrap-up: slider memory + doc fixes pushed and live at 8f46e98)_
+_Last updated: 2026-10-04 19:40 CT (final wrap-up: ADR-0002 goal docs pushed; site live at 8f46e98)_
 
 ## 🎯 Current state
 `main` is pushed and **live** at [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com): `main@8f46e98`, stamp `v0.0.0 🐠 LEAVE · 8f46e9 · 2026-10-04`, bundle `index-DaNVior9.js`, static redeploy 2026-10-04 19:04 (backup `index.html.bak-20261004190422`; the earlier `48bace3` deploy's backup is `index.html.bak-20261004171951`). Verified live: 200, bundle equals local, 40/40 files 200, `/api/health` 200, uploads off, badge present. API container (`mocap-api`) untouched since 2026-09-30, **uploads OFF** (no `CONTACT_EMAIL`).
