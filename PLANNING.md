@@ -1,68 +1,70 @@
 # 🗺️ Puppeteer Lab: Roadmap and Next Steps
 
-_Rewritten 2026-09-06 after the second teardown. The goal is [NORTH_STAR.md](NORTH_STAR.md); this file is the ordered, gated path toward it. Designs live in [docs/tdd/](docs/tdd/). Decisions live in [docs/adr/](docs/adr/). The per-demo `demos/*/PLANNING.md` files are unranked idea backlogs, not commitments ([ADR-0001](docs/adr/0001-demo-first-test-bed.md))._
+_Rewritten 2026-10-04 after the third teardown ([TEARDOWN-2026-10-04](docs/TEARDOWN-2026-10-04.md)). The goal is [NORTH_STAR.md](NORTH_STAR.md); this file is the ordered, gated path toward it. Decisions: [ADR-0002](docs/adr/0002-phone-first-face-puppet.md). Designs: [docs/tdd/](docs/tdd/). The per-demo `demos/*/PLANNING.md` files are unranked idea backlogs._
 
 ## How to read this
 
-- **Now / Next / Later.** Items under Now are sequenced; pick from the top unless a demo date changes the order (see "If a demo date is close").
-- Each item carries a size (**S** = one session or less, **M** = two or three sessions, **L** = four or more), the TDD it comes from, and a **binary gate**.
-- An item is Done when its gate is green **and** the host-verification line (real Chrome, real webcam) is written in `HANDOFF.md`. The in-app preview browser has no camera and no WebGL; it only proves mount.
-- Every item must serve Track, Drive, or Save. If it does not, it goes to the backlog.
+- **Now / Next / Later.** Pick from the top of Now unless Grayson reorders.
+- Each item has a size (**S** = one session or less, **M** = two or three, **L** = four or more), a source, and a **binary gate**.
+- An item is Done when its gate is green **and** it is verified on the device it is for: a real phone (iPhone Safari) for Face Puppet, real desktop Chrome for the lab path. Write the verification line in `HANDOFF.md`.
+- Every item must serve the north-star test (Track, Drive, Save on the phone) or measurement. Otherwise it goes to Later or a backlog.
 
-## 🎯 The demo-day bar
+## 🎯 The north-star bar
 
-What must be true before the tour is shown to friends. Each line maps to an item below.
-
-- [ ] Runs from `npm run preview` with the network off, all five demos. (TDD-004)
-- [ ] Every hub card claim is true and camera-verified. Scrubber and "Tempo Strike" title landed 2026-09-16; camera verification pending. (TDD-003 P1, housekeeping)
-- [ ] Global Smoothing visibly changes the drawn line in Air Canvas and the skeleton in Hand Telemetry. (TDD-001 P1)
-- [ ] A take recorded in Motion Recorder opens in Blender and plays. (TDD-002 P3)
-- [ ] README opens with a GIF and a three-command quick start. (README item)
-- [x] `LICENSE` exists. (housekeeping, 2026-09-16)
+- [ ] A 20 s phone take reads clearly (mouth, brows, blinks) at a steady `loop` of 30 fps or better. (Now 1)
+- [ ] Tuning on the phone is possible without hiding the face. (Now 2)
+- [ ] Visits, takes started and takes saved are counted. (Now 3)
+- [ ] Save & get link works on the live site, and the link plays on a desktop. (Next 5)
+- [x] Face Puppet is the default route with a tap-to-start camera card. (2026-09-30)
+- [x] Slider tuning survives a reload. (2026-10-04, `8f46e98`)
 
 ## ▶️ Now (in order)
 
-Items 1 through 4 landed 2026-09-16 (code-complete, gate-green, **not yet camera-verified**; checklist in `HANDOFF.md`). Item 6 landed the same day (code-complete, gate-green; its P2 long-task claim and P3 real-take claim are **host-pending, not verified** -- P3 is synthetic-fixture-verified only; checklist in `HANDOFF.md`). Now holds items 1 through 4 and 6 until host verification closes them; the next build item to pick up is 5 under Next.
-
 | # | Item | Size | From | Gate |
 |---|---|---|---|---|
-| 1 ✅ | **Landmark-level smoothing** inside `useMediaPipe`, paired by side, so the Global Smoothing slider acts on what every demo draws | S | [TDD-001](docs/tdd/TDD-001-tracker-core.md) P1 | New `smoothLandmarks` test pins the endpoints; host: Air Canvas `RAW` vs `MAX` visibly differ. Closes teardown F1. |
-| 2 ✅ | **Scrubber** in `RecorderControls` (pause on drag, seek, resume), binary-search frame lookup, hub card copy updated in the same commit | S | [TDD-003](docs/tdd/TDD-003-motion-recorder-upgrade.md) P1 | `findFrameIndex` test; host: scrubbed position and audio agree by ear. Closes F2. |
-| 3 ✅ | **Vendor MediaPipe** WASM and models into `public/mediapipe/`, one `assets.ts` with a CDN env override | S | [TDD-004](docs/tdd/TDD-004-offline-first-assets.md) P1 | With DevTools Network offline after first load, all five demos initialize tracking. |
-| 4 ✅ | **Housekeeping batch**: add `LICENSE` (Apache-2.0 to match the headers); delete the `types.ts` JSX `any` augmentation (tsc passes without it); fix the stale "lives in DebugView" comment in `lineReliability.ts`; hub card title "Games" becomes "Tempo Strike"; throttle the camera-rate `setMetrics` / `setBlendshapes` readouts to 10 Hz | S | Teardown F6, F10, F11, F12, F13 | tsc, test, build, smoke green; React Profiler shows sidebar commits at or under 10 per second while tracking. |
-| 6 ✅ | **Recording schema v3** with measured fps and a v2 migration shim, worker serialization, then the **Blender importer** | M | [TDD-002](docs/tdd/TDD-002-recording-schema-and-export.md) P1 to P3 | Round-trip and migration tests; a 30 s face take exports with no long task over 100 ms; host: a real take opens in Blender 4.4+ (host-verified on 5.1.1) and the empties move. Screenshot committed. **Host-pending, not verified:** P2's long-task claim, and P3's real-take claim (synthetic-fixture-verified only; see `HANDOFF.md`). |
+| 1 | **Verify the mouth/responsiveness pass on the phone** (live at `48bace3`): read DEBUG (`loop`, `hand N fps` + `ALT`, `hand`/`face` ms) face-only and with a hand in view; talk normally. Tune `LIP_FILTER.minCutoffScale`, `JAW_OPEN_ABOVE` or the boost defaults from what is seen. | S | Teardown 2026-10-04 findings 1–4 | Screenshots from Grayson's phone in `HANDOFF.md`; speech visibly moves the mouth; `loop` ≥ 30 face-only. If `loop` < 30: open a throughput item (lower camera size, skip the palm detector when no hand is in view, `numHands: 1`). |
+| 2 | **Phone tuning UX**: half-height Controls sheet (face stays visible), Jaw Boost and Face Smoothing first; a clear message when a take recorded no face. | S | Teardown UX findings | WebKit 390x844 shot: face visible with the sheet open; recording with no face shows a message, not FRAMES 0; phone-check green. |
+| 3 | **Measure use**: cookieless analytics on the live site (the kit's Umami via `badge.js`, or the share server), three events: visit, take started, take saved. No camera, audio or landmark data. | S | ADR-0002 decision 5 | Events visible in the dashboard from a real phone session; a network check shows no camera/audio/landmark payload. |
+| 4 | **Render, step puppet state and record only on a new tracker frame.** The stage and the export step the jaw EMA at one rate; recording stops storing duplicate frames (halves take size at 60 Hz). | S–M | Teardown engineering (FaceDemo render loop) | A test pins stage/export state agreement at mixed render rates; a 10 s take at 60 Hz render / 30 fps camera stores ~300 frames, not ~600; facedemo-check green. |
 
 ## ⏭️ Next
 
 | # | Item | Size | From | Gate |
 |---|---|---|---|---|
-| 5 | **`TrackedFrame` + `useTracker`**: one frame shape, `useMediaPipe` and `useFaceTracker` become adapters, face folds into the same loop, then consumers move and the adapters are deleted. Run as a `phased-rebuild`. **Phase 2 (`TrackedFrame`/`buildFrame`/hands-only `useTracker`/`useMediaPipe` adapter) landed 2026-09-16, gate-green, camera-unverified. Phase 3 (face folded into `useTracker`, `useFaceTracker` deleted) landed 2026-09-22 via the Face Puppet overhaul, gate-green, camera-unverified — see `HANDOFF.md`. Remaining: Phase 4 (move consumers, delete adapters) and Phase 5.** | M | [TDD-001](docs/tdd/TDD-001-tracker-core.md) P2 to P4 | Per-phase gates in the TDD; final: no `lastResultsRef` / `handPositionsRef` / `faceResultRef` left in the tree; all five demos host-verified. |
-| 7 | **Motion Recorder trail + skeleton replay** (needs items 5 and 6) | S + S | [TDD-003](docs/tdd/TDD-003-motion-recorder-upgrade.md) P2, P3 | 50 fps or better with a 60 s take buffered; a new take replays as a moving hand; a v2 file still shows spheres. |
-| 8 | **Tailwind at build time**, **synthesized 140 BPM beat** for Tempo Strike, **smoke probe** that fails on any CDN URL in `dist/` | S | [TDD-004](docs/tdd/TDD-004-offline-first-assets.md) P2 to P4 | Hub screenshot before/after identical; Tempo Strike starts offline; CI red when a CDN URL is reintroduced. |
-| 9 | **README**: GIF of the tour, three-command quick start, a "how to verify" section (gates plus the host checklist) | S | Teardown Newcomer lens; `project-setup` kit | A friend who has never seen the repo runs it from the README alone. |
+| 5 | **Uploads on, safely**: server retention or quota-recovery rule (today ~7 IPs can fill 10 GB forever), a private `IP_SALT`, a public `CONTACT_EMAIL`, then switch uploads on; one live end-to-end save opened on a desktop; `docker stats` during a big upload; one `scripts/Pull-Takes.ps1`. | S | Teardown red team; [SHARE_LINKS_ROADMAP](docs/SHARE_LINKS_ROADMAP.md) | A filled quota recovers without manual action (test); live save → desktop playback verified; north-star (c)+(d) pass. |
+| 6 | **Split `components/FaceDemo.tsx`** (805 lines) into capture, export, orbit and panel hooks/components, with tests on the extracted logic. | M | Teardown architect | No behavior change: facedemo-check, orbit-check, cleanup-check, phone-check green; FaceDemo.tsx under ~300 lines. |
+| 7 | **Browser gates in CI** (phone, facedemo, orbit, cleanup, share) with WebKit for phone shots. | M | Teardown red team | CI runs them on push; a deliberate layout break turns CI red. |
+| 8 | **Offline remainder**: Tailwind at build time, synthesized Tempo Strike beat, smoke probe that fails on any CDN URL in `dist/`. | S | [TDD-004](docs/tdd/TDD-004-offline-first-assets.md) P2–P4 | Face Puppet and all lab demos start with the network off after first load; CI red when a CDN URL returns. |
+
+## 🧪 Lab path (kept working, not feature work)
+
+| # | Item | Size | From | Gate |
+|---|---|---|---|---|
+| L1 | **Finish the one frame shape**: move Hand Telemetry, Air Canvas, Tempo Strike and Motion Recorder from the `useMediaPipe` adapter to `TrackedFrame`, delete the adapter and `HandPositions`. Type `FrameData` and drop THREE objects from the take buffer. | M | [TDD-001](docs/tdd/TDD-001-tracker-core.md) P4–P5, teardown | No `lastResultsRef` / `handPositionsRef` left; all lab demos verified in desktop Chrome. |
+| L2 | **Lab check** (ADR-0001's old north-star test): clone, `npm install`, `npm run dev`, wave a hand, record with voice, export, open in Blender, with the network off. | S | ADR-0001 | Done once Next 8 lands; written in `HANDOFF.md`. |
 
 ## 🔭 Later (only after Now and Next, or when someone asks)
 
-- **Folder moves and naming unification** (`core/`, `demos/<name>/` with code beside docs, one id per demo). Pure rename commit, done last so moves never tangle with behavior diffs. Teardown F13.
-- **Armature bake** in the Blender importer; **Unity player script** if a friend on Unity asks. TDD-002 P5 and the Unity note.
-- **Pose** as a third modality, as the proof that `useTracker` generalizes. Only after item 5.
-- **`tsconfig` strict.** Scope it after item 5 removes most of the `any`s; a big lift before that.
-- **Split the 682 KB vendor chunk.** Already lazy-loaded; low priority.
-- **A hands + face puppet demo.** Replaces a tour stop; the tour does not grow to six.
-- **Generated motion as input** (idea 2026-09-15): try kimodo.cpp (text-to-motion) and motion-bricks.cpp (keyframe synthesis) from github.com/localai-org as a second source of frames alongside live capture. Needs TDD-002's schema first so generated clips and recorded takes share one format. Not now.
-
-## ⏱️ If a demo date is close
-
-Reorder Now to 3, 2, 4, 1. Offline first (nothing else matters if tracking cannot start on their wifi), then the two visible lies, then the slider. Item 1 stays valuable but is architectural progress, not demo insurance.
+- **Tracker throughput, structurally**: `requestVideoFrameCallback`, MediaPipe in a Worker, a tasks-vision upgrade from 0.10.9, an A/B with MediaPipe's internal face smoothing off (`numFaces: 2`), dropping the unused facial transformation matrix. Only if Now 1 shows throughput is still the limit.
+- **Recorder trail + skeleton replay** for Motion Recorder ([TDD-003](docs/tdd/TDD-003-motion-recorder-upgrade.md) P2–P3). Lab path; only on request.
+- **Armature bake** in the Blender importer; a Unity player script if someone on Unity asks (TDD-002 P5).
+- **Pose** as a third modality.
+- **Generated motion as input** (idea 2026-09-15): kimodo.cpp and motion-bricks.cpp from github.com/localai-org as a second frame source, in schema v3.
+- **Look or mesh work** (another look, a nose-curvature vertex re-pick, a full-mesh re-pick): only with no open Track item (ADR-0002 decision 3).
+- **Folder and naming unification** (`face-telemetry` / `FaceDemo` / "Face Puppet"); archive finished `docs/superpowers/plans`; regen-and-compare test for `faceTopology.ts`; park unused `meshOpt.mjs` paths.
+- **`tsconfig` strict**, after L1 removes most `any`s. **Split the vendor chunk.**
 
 ## 🗃️ Idea backlogs (not scheduled)
 
-`demos/air-canvas/PLANNING.md`, `demos/tempo-strike/PLANNING.md`, `demos/motion-recorder/PLANNING.md`, `demos/face-telemetry/PLANNING.md`, `demos/hand-telemetry/PLANNING.md`. These hold MIDI/OSC routing, BVH/GLTF transposers, Spatial Pong, Marionette IK, a mimic mask, a collaborative canvas, and more. None are scheduled. To promote one, move it into Now or Next here with a reason, a size, and a gate.
+`demos/air-canvas/PLANNING.md`, `demos/tempo-strike/PLANNING.md`, `demos/motion-recorder/PLANNING.md`, `demos/face-telemetry/PLANNING.md`, `demos/hand-telemetry/PLANNING.md`. To promote one, move it into Now or Next here with a reason, a size and a gate, and say how it serves the North Star.
 
 ## ✅ Done (brief)
 
-- **2026-09-04**: imported from the AI Studio export; public repo; teardown #1 and its fixes (audio and kinematics exports, Gemini key removed from the bundle); drei bump; Line Reliability for Air Canvas; DebugView split into Air Canvas + Hand Telemetry on a shared engine; shared `SmoothingControl`; CI (typecheck, test, build, smoke); `resolveHands` partial-handedness fix; tsc clean; README `worldZ` fix; demos code-split.
-- **2026-09-06**: teardown #2 ([docs/TEARDOWN-2026-09-06.md](docs/TEARDOWN-2026-09-06.md)); `NORTH_STAR.md`; ADR-0001; TDD-001 through TDD-004; this roadmap; stale demo docs fixed.
-- **2026-09-16**: Now items 1 to 4 shipped (landmark smoothing `a69d3cd`, scrubber `21f319a`+`121eacc`, vendored MediaPipe `8c863b1`+`2a38fcf`, housekeeping `bcbde1d`) plus the portfolio build stamp `68627b9`. Gate-green; camera verification outstanding.
-- **2026-09-16 (cont.)**: item 6 (recording schema v3 + Blender importer, TDD-002 P1 to P3) shipped: v3 envelope build/serialize/migrateV2 (`9652985`), worker serialization + chunked fallback (`d552b10`), Blender importer + doc with screenshot (`78adf10`, `6ebc5a7`). Final-review fix wave the same day: Blender's `SequenceEditor.sequences` -> `.strips` rename (4.4+) handled with a fallback, importer now also accepts the `puppeteer-lab/kinematics` schema, this file updated. Gate-green; P2's long-task claim and P3's real-take claim remain host-pending (P3 synthetic-fixture-verified only).
-- **2026-09-22**: Face Puppet overhaul (`e40eb88`..`f2d4b69`): One Euro face smoothing with a slider, scale-invariant ratio+hysteresis mouth with a closed seam, a fixed ~210-vertex low-poly faceted head generated from MediaPipe's canonical face (flat Lambert, one gray ramp) replacing the old wireframe puppet, low-poly hands, Video/Pack export with audio and lead-in/tail hold, a synthetic-take generator for camera-less screenshot proof. TDD-001 Phase 3 (face into `useTracker`) landed as part of this pass: face folded into the shared tracker loop, `useFaceTracker` deleted (not adapted; its only consumer moved to `useTracker` directly), and Face Puppet is a combined face+hands loop in one `useTracker` call. The TDD gate's "enabling `hands` and `face` together in Hand Telemetry (dev-only toggle)" was not built; Face Puppet is the combined-loop consumer instead. Code-complete, gate-green; host verification (checklist in `HANDOFF.md`) and the final whole-branch review still pending.
+- **2026-09-04**: imported from the AI Studio export; teardown #1 and its fixes; shared engine; CI (typecheck, test, build, smoke); demos code-split.
+- **2026-09-06**: teardown #2; ADR-0001; TDD-001 to TDD-004; first roadmap.
+- **2026-09-16**: landmark smoothing, scrubber, vendored MediaPipe, housekeeping, build stamp; recording schema v3 + worker serialization + Blender importer; `TrackedFrame`/`useTracker` Phase 2.
+- **2026-09-22**: Face Puppet overhaul (One Euro face smoothing, ratio+hysteresis mouth, low-poly head, Video/Pack export); TDD-001 Phase 3 (face in `useTracker`, `useFaceTracker` deleted); Three.js renderer.
+- **2026-09-29**: phone layout + rear camera; phone-check gate.
+- **2026-09-30**: Face Puppet default route + tap-to-start camera card; share links (`server/`, `/t/<id>` viewer, private archive), deployed dark, uploads off.
+- **2026-10-02/03**: take Clean up + Orbit; neon look; normals fix; Flip then Even face mesh with hard-edge smoothing; tracker DEBUG overlay; 60 fps camera request.
+- **2026-10-04**: teardown #3; mouth/responsiveness pass (jawOpen mouth gate, lips-only lighter filter, hands yield under load on model cost, one detection per camera frame, boosts 100%) live at `48bace3`; slider memory + doc fixes live at `8f46e98`; ADR-0002, this roadmap and the North Star rewritten.

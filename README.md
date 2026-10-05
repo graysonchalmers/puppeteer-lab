@@ -1,15 +1,18 @@
 # PUPPETEER LAB
-### Webcam hand mocap: track it, drive things with it, save it out
+### Your face drives a puppet, on your phone: record it with voice, replay it, share it
 
-**Puppeteer Lab** is a test bed that proves a plain webcam is enough to motion-capture your hands (and face) in the browser, drive objects with the result, and record the performance for use elsewhere. No gloves, no depth camera, no install beyond `npm`. It exists to show game-dev friends what zero-hardware tracking can do and to be a place to try ideas. The goal and the bar for "done" are in [NORTH_STAR.md](NORTH_STAR.md).
+**Puppeteer Lab** is a phone-first face puppet in the browser. Open [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com), allow the camera, and your face (and hands) drive a stylized puppet you can record with voice, replay, clean up, orbit and export. No install, no account; camera video never leaves the device. The goal and the bar for "done" are in [NORTH_STAR.md](NORTH_STAR.md) ([ADR-0002](docs/adr/0002-phone-first-face-puppet.md)).
 
-## The five demos (the tour, in order)
+## Face Puppet (the front door)
+
+A stylized puppet driven by 478 face landmarks and the blendshapes (jaw, brows, blinks), with low-poly hands, recorded voice replay, Clean up and Orbit on playback, Video/Pack export, and share links (built, uploads currently off). Tune it with Face Smoothing and the Brow/Jaw/Blink boosts (remembered per browser); DEBUG shows the live tracker numbers.
+
+## The lab path (desktop, kept working)
 
 1. **Hand Telemetry**: what the camera sees. Skeleton, confidence gate, inter-hand distances, smoothing, a pinch-grabbable 3D cube, and a landmark recorder.
 2. **Air Canvas**: drive a 2D thing. Pinch to draw glowing lines, grab and move them with the other hand, dwell to undo or clear, with a Line Reliability control that bridges tracking dropouts.
 3. **Tempo Strike**: drive 3D things in a game loop. Your hands become two sabers; slice beats in time with the music; velocity scores.
-4. **Motion Recorder**: save it out. Record hand motion with microphone audio, replay it in a 3D void you can orbit, export as JSON or WebM. Scrub with the timeline. (Skeleton replay is still on the roadmap.)
-5. **Face Puppet**: same pattern, different model. A stylized puppet driven by 478 landmarks and 52 blendshapes, with recorded voice replay.
+4. **Motion Recorder**: record hand motion with microphone audio, replay it in a 3D void you can orbit, scrub, export as JSON or WebM, open in Blender ([docs/blender-importer.md](docs/blender-importer.md)).
 
 ## Start here
 

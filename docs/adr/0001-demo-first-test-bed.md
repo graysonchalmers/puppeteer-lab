@@ -1,6 +1,6 @@
 # 0001: Puppeteer Lab is a demo-first test bed, not a product
 
-Status: accepted (2026-09-06)
+Status: superseded by [ADR-0002](0002-phone-first-face-puppet.md) (2026-10-04). Accepted 2026-09-06.
 
 ## Context
 

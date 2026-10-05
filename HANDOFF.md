@@ -22,15 +22,16 @@ Deployed; waiting on Grayson's phone. Nothing in any gate or harness exercises t
 
 ## ▶️ Next concrete step
 1. **Grayson on the phone:** Face Puppet, DEBUG on (Controls drawer), talk normally. Report `loop`, `hand N fps` + whether `ALT` shows, `hand`/`face` ms, and whether speech reads. If too twitchy: lower Jaw Boost or raise Face Smoothing; if lips jitter, drop `LIP_FILTER.minCutoffScale` (6 -> 4).
-2. Alternative: **ADR-0002 + rewrite NORTH_STAR / README / PLANNING** to the phone-first face puppet (draft North Star in the teardown, ⚠️ CONFIRM marks). One hour, fixes the drift every session reads.
+2. Alternative: **PLANNING Now 3, measure use** (cookieless visit / take started / take saved), the first thing ADR-0002 asks for before new features.
 3. Alternative: **phone tuning UX**: half-height Controls sheet with Jaw/Smoothing first, a message on an empty take (sliders now persist).
 
 ## ❓ Open questions
-- North Star: confirm phone-first, audience = anyone with the URL, measure use first (teardown draft).
 - Is the mic-track phone-check miss a new flake or pre-existing? (Check against `0af7fd6` if it recurs.)
 - `CONTACT_EMAIL` and uploads on; server quota has no retention (about 7 IPs fill 10 GB), default `IP_SALT` is public: fix before uploads go on.
 - 60 fps camera: does the phone grant it (`cam N fps`), and does `loop` keep up?
 - Carried: Tailwind CDN + song URL still block the offline north-star test; render loop re-steps puppet state every rAF (stage/export EMA drift, recording stores duplicate frames); `useMediaPipe` adapter on 4 demos; FaceDemo.tsx 805 lines; browser gates not in CI; iOS Safari opus audio, touch Orbit near the 100 s cleanup cap.
+
+**Goal docs (2026-10-04, after the deploy):** [ADR-0002](docs/adr/0002-phone-first-face-puppet.md) accepted (phone-first face puppet, anyone with the URL, track before looks, measure before adding, hand demos = frozen lab path; supersedes ADR-0001). `NORTH_STAR.md`, `PLANNING.md` (new Now 1-4, Next 5-8, lab path L1-L2) and the README intro rewritten to match. Docs only, no redeploy.
 
 ## 🗂️ Changed this session (2026-10-04)
 - Branch `main` (direct-to-main convention). Commits `73dbda8`, `48bace3` + this wrap-up. Files: `hooks/useTracker.ts`, `components/shared/{oneEuro,facePolicy,trackerStats}.ts` (+tests), `components/face/{mouthState,puppetState}.ts` (+tests), `components/{FaceDemo,TakeViewer,TrackerDebug}.tsx`, `docs/TEARDOWN-2026-10-04.md`.
