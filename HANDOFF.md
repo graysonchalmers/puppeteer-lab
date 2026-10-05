@@ -1,9 +1,9 @@
 # 🧭 Session Handoff - Puppeteer Lab
 
-_Last updated: 2026-10-04 17:25 CT (wrap-up after push + live redeploy of the phone mouth/perf pass)_
+_Last updated: 2026-10-04 19:05 CT (final wrap-up: slider memory + doc fixes pushed and live at 8f46e98)_
 
 ## 🎯 Current state
-`main` is pushed and **live** at [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com): `main@48bace3`, stamp `v0.0.0 🦔 DEMISE · 48bace · 2026-10-04`, bundle `index-BtcnJdAQ.js`, static redeploy 2026-10-04 (backup `index.html.bak-20261004171951`). Verified live: 200, bundle equals local, 40/40 files 200, `/api/health` 200, uploads off, badge present, new DEBUG labels showing (Playwright, fake camera). API container (`mocap-api`) untouched since 2026-09-30, **uploads OFF** (no `CONTACT_EMAIL`).
+`main` is pushed and **live** at [mocap.graysonchalmers.com](https://mocap.graysonchalmers.com): `main@8f46e98`, stamp `v0.0.0 🐠 LEAVE · 8f46e9 · 2026-10-04`, bundle `index-DaNVior9.js`, static redeploy 2026-10-04 19:04 (backup `index.html.bak-20261004190422`; the earlier `48bace3` deploy's backup is `index.html.bak-20261004171951`). Verified live: 200, bundle equals local, 40/40 files 200, `/api/health` 200, uploads off, badge present. API container (`mocap-api`) untouched since 2026-09-30, **uploads OFF** (no `CONTACT_EMAIL`).
 
 Shipped this session (Face Puppet speech on the phone; cause and numbers in `docs/TEARDOWN-2026-10-04.md`):
 - **Mouth gate** (`components/face/mouthState.ts`): opens on lip ratio > 0.08 **or** raw `jawOpen` > 0.06; closes only when both are shut (< 0.05, < 0.03). Calibrated on Grayson's 2026-09-22 take: 0/236 resting frames open, speaking frames held shut 26/275 -> 0.
@@ -11,9 +11,11 @@ Shipped this session (Face Puppet speech on the phone; cause and numbers in `doc
 - **Cost policy** (`components/shared/facePolicy.ts`): under load the **hands** alternate, the face runs every tick; "load" = `handMs + faceMs` (on > 33 ms, off < 22 ms), not tick interval.
 - **One detection per camera frame** (`video.currentTime` dedupe); turns itself off for a stream whose `currentTime` is frozen 500 ms, so tracking cannot stall.
 - **Boost defaults 100%** (Brow, Jaw, Blink) in Face Puppet and the share viewer; SPEAKING readout uses the jaw gate.
+- **Slider memory** (`components/face/facePrefs.ts`): Face Smoothing and Brow/Jaw/Blink boosts persist per browser in localStorage (`puppeteerlab.face`), so phone tuning survives Safari evicting the tab. Verified: set, reload, value kept.
+- **Docs:** README tracking section rewritten to `useTracker` (vendored assets, dedupe, cost policy); stale facts in NORTH_STAR fixed (deleted `useFaceTracker` path, importer exists, preview has WebGL) without changing the goal (that still needs ADR-0002); Blender doc notes Pack exports are a zip. Unused `RecordingSession` type removed.
 - **DEBUG overlay** now reads `hand N fps ALT` (ALT = hands halved); `loop` counts real camera frames.
 
-Gates on `48bace3`: tsc clean, 555 tests (`recordingSchema` 'under 100ms' timing flake, passes alone), facedemo-check 27/27, orbit-check 11/11, phone-check 97/97 on 4 of 6 runs (misses: once under parallel browser load, once the mic-track check `{"video":1,"audio":0}`, an async path this change does not touch: watch it).
+Gates (`48bace3`, rechecked on `8f46e98`: facedemo 27/27, phone 97/97, 557 tests): tsc clean, 555 tests (`recordingSchema` 'under 100ms' timing flake, passes alone), facedemo-check 27/27, orbit-check 11/11, phone-check 97/97 on 4 of 6 runs (misses: once under parallel browser load, once the mic-track check `{"video":1,"audio":0}`, an async path this change does not touch: watch it).
 
 ## 📌 Where we stopped
 Deployed; waiting on Grayson's phone. Nothing in any gate or harness exercises the lip filter or the dedupe with a real face (playback uses already-filtered landmarks; no agent camera).
@@ -21,7 +23,7 @@ Deployed; waiting on Grayson's phone. Nothing in any gate or harness exercises t
 ## ▶️ Next concrete step
 1. **Grayson on the phone:** Face Puppet, DEBUG on (Controls drawer), talk normally. Report `loop`, `hand N fps` + whether `ALT` shows, `hand`/`face` ms, and whether speech reads. If too twitchy: lower Jaw Boost or raise Face Smoothing; if lips jitter, drop `LIP_FILTER.minCutoffScale` (6 -> 4).
 2. Alternative: **ADR-0002 + rewrite NORTH_STAR / README / PLANNING** to the phone-first face puppet (draft North Star in the teardown, ⚠️ CONFIRM marks). One hour, fixes the drift every session reads.
-3. Alternative: **phone tuning UX**: half-height Controls sheet with Jaw/Smoothing first, persist sliders in localStorage, message on an empty take.
+3. Alternative: **phone tuning UX**: half-height Controls sheet with Jaw/Smoothing first, a message on an empty take (sliders now persist).
 
 ## ❓ Open questions
 - North Star: confirm phone-first, audience = anyone with the URL, measure use first (teardown draft).

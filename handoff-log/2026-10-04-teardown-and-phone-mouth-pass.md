@@ -20,3 +20,5 @@
 **Gates:** tsc, 555 tests, facedemo 27/27, orbit 11/11, phone-check 97/97 on 4 of 6 runs (one mic-track miss, untouched path).
 
 **Deploy:** pushed `0af7fd6..48bace3`; static redeploy to apps-01 (`/var/www/mocap`, backup `index.html.bak-20261004171951`, stale assets pruned, root:root a+rX); live verified.
+
+**Later the same day (wrap-up, `8f46e98`, pushed and live, backup `index.html.bak-20261004190422`):** Grayson asked for docs and easy fixes on the way out. Face Smoothing and the three boosts now persist per browser (`facePrefs.ts` + test; verified set/reload). README tracking section and stale NORTH_STAR facts corrected (goal text untouched: that is ADR-0002's job). Blender doc: Pack exports are a zip. Removed the unused `RecordingSession` type. A fork/out-of-memory hiccup from other sessions' load interrupted one run; stopped this session's three orphaned `vite preview` processes (ports 4180-4182, left by `startPreview` children on Windows) and reran. Gates: tsc, 557 tests (recordingSchema timing flake), facedemo 27/27, phone 97/97.
