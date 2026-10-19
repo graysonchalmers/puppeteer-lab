@@ -11,6 +11,8 @@ param(
   [string]$Token = $env:MOCAP_ADMIN_TOKEN
 )
 $ErrorActionPreference = 'Stop'
+# No progress bars: on a Linux TTY the progress renderer polls the cursor (ESC[6n) and can hang Invoke-WebRequest (Tool-TARS b55c6a5).
+$ProgressPreference = 'SilentlyContinue'
 if (-not $Token) { throw 'Set the MOCAP_ADMIN_TOKEN environment variable (or pass -Token) first.' }
 
 # Absolute path: [System.IO.File] resolves relative paths against the process directory, not PowerShell's location.
